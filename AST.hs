@@ -7,12 +7,12 @@ type Character = String
 
 type Label = String
 
-data Header = Header [Character] deriving (Eq, Show)
+newtype Header = Header [Character] deriving (Eq, Show)
 
 data Program = Program Header (Map.Map Label Act) deriving (Eq, Show)
 data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
-data Scene = Scene [Statement] deriving (Eq, Show)
+newtype Scene = Scene [Statement] deriving (Eq, Show)
 
 -- TODO: for Enter, it must be a list of 1 or more characters. We can statically
 -- enforce that with a slightly different list type.
