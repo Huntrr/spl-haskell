@@ -17,6 +17,7 @@ Kasra Koushan
 - Instead of optimizations... x86 compilation?
     - Would be very inefficient (maybe not though since we can statically figure out which variables are accessed in which scenes!)
     - Or maybe just to C. Compilation of I/O to x86 just seems like a hassle.
+- Profiling before/after optimization with QuickCheck to see if optimization makes programs strictly faster?? Or is that not right?
 - Do our optimizations require a transformation to SSA? Because I'm not sure we could do that!
 
 

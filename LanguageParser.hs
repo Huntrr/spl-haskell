@@ -15,7 +15,7 @@ actP = undefined
 sceneP :: P.Parser (Label, Scene)
 sceneP = undefined
 
-statementP :: P.Parser Statement
+statementP :: P.Parser (Statement, Annotation)
 statementP = undefined
 
 expressionP :: P.Parser Expression

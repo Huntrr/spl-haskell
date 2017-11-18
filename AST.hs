@@ -9,14 +9,14 @@ type Label = String
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
-type Source = (String, Int)
+type Annotation = (String, Int)
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
 data Program = Program Header (Map.Map Label Act) deriving (Eq, Show)
 data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
-newtype Scene = Scene [(Statement, Source)] deriving (Eq, Show)
+newtype Scene = Scene [(Statement, Annotation)] deriving (Eq, Show)
 
 -- TODO: for Enter, it must be a list of 1 or more characters. We can statically
 -- enforce that with a slightly different list type.
