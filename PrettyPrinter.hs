@@ -4,7 +4,8 @@ import Text.PrettyPrint (Doc)
 import qualified Text.PrettyPrint as PP
 
 class PP a where
-  pp a :: a -> Doc
+  pp :: a -> Doc
+
 
 render :: PP a => a -> String
 render = PP.render . pp
