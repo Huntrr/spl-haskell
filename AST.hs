@@ -34,9 +34,10 @@ type Value = Int
 data Expression = Constant Value                   |
                   Sum        Expression Expression |
                   Difference Expression Expression |
-                  Square     Expression Expression |
-                  Cube       Expression Expression |
-                  SquareRoot Expression Expression |
+                  Square     Expression            |
+                  Cube       Expression            |
+                  SquareRoot Expression            |
+                  Twice      Expression            |
                   Var Variable
 
 data Relationship = Lt | Le | E | Gt | Ge deriving (Eq, Show)
