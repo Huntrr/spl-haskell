@@ -1,3 +1,7 @@
+{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
+    FlexibleInstances #-}
+{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
+
 module Optimize where
 
 import AST

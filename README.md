@@ -18,7 +18,10 @@ Kasra Koushan
     - Would be very inefficient (maybe not though since we can statically figure out which variables are accessed in which scenes!)
     - Or maybe just to C. Compilation of I/O to x86 just seems like a hassle.
 - Profiling before/after optimization with QuickCheck to see if optimization makes programs strictly faster?? Or is that not right?
+- Monad type for evaluator, same as from exercise?
 - Do our optimizations require a transformation to SSA? Because I'm not sure we could do that!
+- How to handle IO (evalSentence), does all of our code need to be in IO monad???
+- How to annotate error as it propagates (i.e. add line and line number!)
 
 
 ## Modules:

@@ -1,11 +1,25 @@
+{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
+    FlexibleInstances #-}
+{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
+
 module Tests where
 
-import Test.HUnit (runTestTT,Test(..),Assertion, (~?=), (~:), assert)
+import Test.HUnit (runTestTT,Test(..),Assertion, (~?=), (~:), assert,
+  assertFailure)
 import Test.QuickCheck (Arbitrary(..), Testable(..), Gen, elements,
   oneof, frequency, sized, quickCheckWith, stdArgs, maxSize,
   classify,  maxSuccess, listOf, resize, scale, (==>))
 
+import Data.Map (Map)
+import qualified Data.Map as Map
+
+import qualified Parser as P
+import qualified ParserCombinators as P
+
 import LanguageParser
+import AST
+import Evaluator
+import PrettyPrinter
 
 main :: IO ()
 main = do
@@ -14,10 +28,20 @@ main = do
    quickCheckN 500 prop_roundtrip
    return ()
 
+quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
+quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100 }
+
+
+raises :: Program -> Exception -> Test
+s `raises` v = case (execute s emptyState) of
+   (Left v',_) -> v ~?= v'
+   _            -> TestCase $ assertFailure "Error in raises"
+
+
 ------------ Sample Programs -----------------
 samplePrograms = [ ("hello", [], "Hello World!")
                  , ("primes", [], "12357111315")
-                 , ("reverse", ['a', 'b', 'c', 'd', -1], "dcba") ]
+                 , ("reverse", ['a', 'b', 'c', 'd', '0'], "dcba") ]
 
 -- TODO: Run all these programs with given inputs and check for outputs
 
@@ -42,7 +66,7 @@ samplePrograms = [ ("hello", [], "Hello World!")
 ------------- QUICKCHECK --------------------
 ------------- Roundtrip property -------------
 prop_roundtrip :: Program -> Bool
-prop_roundtrip s = P.parse programP (indented s) == Right s
+prop_roundtrip s = P.parse programP (render s) == Right s
 -- ^^ TODO THIS WON'T WORK
 -- (Constant 7
 --       => "the sum of a large angry red king and a rat"
@@ -63,3 +87,7 @@ prop_roundtrip s = P.parse programP (indented s) == Right s
 
 ------------- Arbitrary Instance -------------
 -- TODO
+
+instance Arbitrary Program where
+  arbitrary = undefined
+  shrink = undefined

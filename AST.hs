@@ -1,15 +1,22 @@
+{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
+    FlexibleInstances #-}
+{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
+
 module AST where
 
 import qualified Data.Map.Lazy as Map
 
 -- Character name
 type Character = String
+type Description = String
 type Title = String
 type Label = String
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
 type Annotation = (String, Int)
+data Exception = DivideByZero |
+                 EmptyStack deriving (Eq, Show)
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
@@ -42,7 +49,7 @@ data Expression = Constant Value                   |
                   Cube       Expression            |
                   SquareRoot Expression            |
                   Twice      Expression            |
-                  Var Variable
+                  Var Character deriving (Eq, Show)
 
 data Relationship = Lt | Le | E | Gt | Ge deriving (Eq, Show)
 

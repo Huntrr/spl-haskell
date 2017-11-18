@@ -1,7 +1,13 @@
+{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
+    FlexibleInstances #-}
+{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
+
 module LanguageParser where
 
 import qualified Parser as P
 import qualified ParserCombinators as P
+
+import AST
 
 programP :: P.Parser Program
 programP = undefined
