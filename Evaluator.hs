@@ -8,8 +8,8 @@ import Control.Monad.State (State)
 import qualified Control.Monad.State as S
 
 -- TODO: Store will probably change
-data Store = Store { getCharMap :: Map Character Value
-                   , getChars   :: [Character]
+data Store = Store { getCharMap     :: Map Character Value
+                   , getActiveChars :: [Character]
                    } deriving (Eq, Show)
 
 evalE :: Expression -> State Store Value

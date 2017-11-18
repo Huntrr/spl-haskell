@@ -15,7 +15,9 @@ main = do
    return ()
 
 ------------ Sample Programs -----------------
--- TODO
+samplePrograms = [ ("hello", [], "Hello World!")
+                 , ("primes", [], "12357111315")
+                 , ("reverse", ['a', 'b', 'c', 'd', -1], "dcba") ]
 
 ------------ HUnit Tests ---------------------
 -- TODO
