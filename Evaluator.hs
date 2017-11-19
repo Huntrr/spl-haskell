@@ -23,10 +23,9 @@ data Store = Store { getCharMap     :: Map Character Value
 emptyState = Store Map.empty [] False Nothing Map.empty
 
 -- TODO: Is this the right monad type??
+-- Alternative Triple idea... Either Error, State, or BLOCK!
 type M = ExceptT (Exception, Annotation) (State Store)
 
-evalE :: Expression -> State Store Value
-evalE = undefined
 
 evalAct :: (MonadError Exception m, MonadState Store m) => Act -> m ()
 evalAct = undefined
@@ -38,11 +37,12 @@ evalStatement :: (MonadError Exception m, MonadState Store m) =>
   (Statement, Annotation) -> m ()
 evalStatement = undefined
 
-evalSentence :: (MonadError Exception m, MonadState Store m) => Sentence -> m ()
+evalSentence :: (MonadError Exception m, MonadState Store m) =>
+  Sentence -> Annotation -> m ()
 evalSentence = undefined
 
 evalExpression :: (MonadError Exception m, MonadState Store m) =>
-  Expression -> m Value
+  Expression -> Annotation -> m Value
 evalExpression = undefined
 
 execute :: Program -> Store -> (Either Exception (), Store)
