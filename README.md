@@ -1,5 +1,5 @@
 # Much Ado About Monads
-This is a (Shakespeare Programming Language)[http://shakespearelang.sourceforge.net/report/shakespeare/] interpreter and optimizer written in Haskell.
+This is a [Shakespeare Programming Language](http://shakespearelang.sourceforge.net/report/shakespeare/) interpreter and optimizer written in Haskell.
 
 
 ## Usage
