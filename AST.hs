@@ -34,7 +34,7 @@ newtype Scene = Scene [(Statement, Annotation)] deriving (Eq, Show)
 data Statement = Enter [Character] |
                  Exit  [Character] |
                  Exeunt            |
-                 Line Character [Sentence]
+                 Line Character Sentence
                  deriving (Eq, Show)
 
 -- TODO: should Value retain the underlying structure (e.g. what is the noun)
