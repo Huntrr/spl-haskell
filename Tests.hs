@@ -12,9 +12,8 @@ import Test.QuickCheck (Arbitrary(..), Testable(..), Gen, elements,
 
 import Data.Map (Map)
 import qualified Data.Map as Map
-
-import qualified Parser as P
-import qualified ParserCombinators as P
+import qualified Text.Megaparsec as P
+import qualified Text.Megaparsec.Char as P
 
 import LanguageParser
 import AST
@@ -49,7 +48,67 @@ samplePrograms = [ ("hello", [], "Hello World!")
 -- TODO: PARSER
 -- Unknown vocabulary
 
+helloWorldHeader = Header
+                   "The Infamous Hello World Program."
+                   [
+                      Character "Romeo" "a young man with a remarkable patience.",
+                      Character "Juliet" "a likewise young woman of remarkable grace.",
+                      Character "Ophelia" "a remarkable woman much in dispute with Hamlet.",
+                      Character "Hamlet" "the flatterer of Andersen Insulting A/S."
+                    ]
+
+headerString = "The Infamous Hello World Program.\n   \
+                          \Romeo,    a young man with a remarkable patience.\n\
+                          \Juliet, a likewise young woman of remarkable grace.   \n\
+                          \   Ophelia, a remarkable woman much in dispute with Hamlet.\n\
+                          \Hamlet,the flatterer of Andersen Insulting A/S.\n"
+
+testParseHeader :: Test
+testParseHeader =
+  TestList
+    [
+    P.parse headerP "" headerString ~?= Right helloWorldHeader
+    ]
+
+testParseConstant :: Test
+testParseConstant =
+  TestList
+    [
+      P.parse constantP "" "my Flower" ~?= Right (Constant 1),
+      P.parse constantP "" "an amazing Flower" ~?= Right (Constant 2),
+      P.parse constantP "" "an amazing amazing Flower" ~?= Right (Constant 4),
+      P.parse constantP "" "a Pig" ~?= Right (Constant (-1)),
+      P.parse constantP "" "my amazing Pig" ~?= Right (Constant (-2)),
+      P.parse constantP "" "your amazing amazing Pig" ~?= Right (Constant (-4))
+    ]
+
+testParseExpression :: Test
+testParseExpression =
+  TestList
+    [
+      P.parse expressionP "" "my little pony" ~?= Right (Constant 2),
+      P.parse expressionP "" "the difference between my little pony and your big hairy hound"
+        ~?= Right (Difference (Constant 2) (Constant 4)),
+      P.parse expressionP "" "the cube of your sorry little codpiece"
+        ~?= Right (Cube (Constant (-4))),
+      P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
+        ~?= Right (Difference (Square (Difference (Constant 2) (Constant 4))) (Cube (Constant (-4)))),
+      P.parse expressionP "" "Juliet" ~?= Right (Var "Juliet"),
+      -- TODO: multi-word variables don't work yet
+      P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var "the Ghost")),
+      P.parse expressionP "" "the product of Juliet and a Pig"
+        ~?= Right (Product (Var "Juliet") (Constant (-1))),
+      P.parse expressionP "" "the difference between Juliet and thyself"
+        ~?= Right (Difference (Var "Juliet") (Var "thyself")),
+      P.parse expressionP "" "the difference between the square of Juliet and thyself"
+        ~?= Right (Difference (Square (Var "Juliet")) (Var "thyself")),
+      P.parse expressionP "" "the difference between the square root of Juliet and thyself"
+        ~?= Right (Difference (SquareRoot (Var "Juliet")) (Var "thyself")),
+      P.parse expressionP "" "the difference between the square root of Juliet and twice thyself"
+        ~?= Right (Difference (SquareRoot (Var "Juliet")) (Twice (Var "thyself")))
+    ]
 -- TODO: PRETTY PRINTER
+
 
 -- TODO: EVALUATOR
 -- Mostly handled with samplePrograms tests, but should also test edge cases
@@ -66,7 +125,7 @@ samplePrograms = [ ("hello", [], "Hello World!")
 ------------- QUICKCHECK --------------------
 ------------- Roundtrip property -------------
 prop_roundtrip :: Program -> Bool
-prop_roundtrip s = P.parse programP (render s) == Right s
+prop_roundtrip s = P.parse programP "" (render s) == Right s
 -- ^^ TODO THIS WON'T WORK
 -- (Constant 7
 --       => "the sum of a large angry red king and a rat"
