@@ -91,6 +91,8 @@ testParseExpression =
         ~?= Right (Difference (Constant 2) (Constant 4)),
       P.parse expressionP "" "the cube of your sorry little codpiece"
         ~?= Right (Cube (Constant (-4))),
+      P.parse expressionP "" "lying stupid fatherless big smelly half-witted corward"
+        ~?= Right (Constant (-64)),
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant 4))) (Cube (Constant (-4)))),
       P.parse expressionP "" "Juliet" ~?= Right (Var "Juliet"),

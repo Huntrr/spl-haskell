@@ -8,7 +8,7 @@ module LanguageParser where
 import qualified Text.Megaparsec as P
 import qualified Text.Megaparsec.Char as P
 import qualified Data.Map.Lazy as Map
-import Data.Char (isSpace, isAlpha)
+import Data.Char (isSpace, isAlpha, isPunctuation)
 import Control.Applicative
 import Data.Void
 
@@ -80,6 +80,74 @@ double = (liftA2 (\a b -> [a, b]) ((some P.letterChar) <* P.space1 <* P.string "
 
 lineP :: Parser Statement
 lineP = undefined
+
+sentenceP :: Parser Sentence
+sentenceP = P.try ifSoP <|>
+            P.try outputNumberP <|>
+            P.try outputCharacterP <|>
+            P.try inputNumberP <|>
+            P.try inputCharacterP <|>
+            P.try declarationP <|>
+            P.try pushP <|>
+            P.try popP <|>
+            P.try goToSceneP <|>
+            P.try goToActP <|>
+            conditionalP
+            where
+              -- TODO: Again, all is case insensitive.
+              ifSoP :: Parser Sentence
+              ifSoP = IfSo <$> (P.string' "If so" *> P.space *> P.char ',' *> P.space *> sentenceP)
+
+              outputNumberP :: Parser Sentence
+              outputNumberP = constP OutputNumber "Open your heart"
+
+              outputCharacterP :: Parser Sentence
+              outputCharacterP = constP OutputCharacter "Speak your mind"
+
+              inputNumberP :: Parser Sentence
+              inputNumberP = constP InputNumber "Listen to your heart"
+
+              inputCharacterP :: Parser Sentence
+              inputCharacterP = constP InputCharacter "Open your mind"
+
+              -- TODO: this actually won't work right now.
+              declarationP :: Parser Sentence
+              declarationP = Declaration <$> (P.string' "You" *> P.space1 *> expressionP)
+
+              pushP :: Parser Sentence
+              pushP = constP Push "Remember me"
+
+              popP :: Parser Sentence
+              popP = (constP Pop "Recall") <* P.takeWhileP Nothing (not . isPunctuation)
+
+              genericGoTo :: (String -> Sentence) -> String -> Parser Sentence
+              genericGoTo con s = con <$> ((oneOfString' ["Let us", "We shall", "We must"]) *>
+                                  P.space1 *> (oneOfString' ["return to", "proceed to"]) *>
+                                  P.space1 *> P.string' s *> P.space1 *> P.takeWhileP Nothing (not . isPunctuation))
+
+              goToSceneP :: Parser Sentence
+              goToSceneP = genericGoTo GotoScene "scene"
+
+              goToActP :: Parser Sentence
+              goToActP = genericGoTo GotoAct "act"
+
+              conditionalP :: Parser Sentence
+              conditionalP = undefined
+
+-- TODO
+positiveAdjective = []
+
+-- TODO
+negativeAdjective = []
+
+equalsP :: Parser Comparison
+-- TODO: what else should go with am/is
+equalsP = liftA2 (Comparison E) (oneOfString' ["am", "is"] *> expressionP <* P.string' "as" <*
+          P.space1 <* oneOfString' positiveAdjective <* P.space1) (P.string' "as" *>
+          P.space1 *> expressionP)
+
+constP :: a -> String -> Parser a
+constP a s = const a <$> ((P.string' s) <* P.space)
 
 -- TODO: just for testing
 positiveNouns = ["Flower", "Tree", "pony", "hound"]
