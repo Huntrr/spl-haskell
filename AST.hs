@@ -52,7 +52,7 @@ data Expression = Constant Value                   |
 
 data Relationship = Lt | Le | E | Ne | Gt | Ge deriving (Eq, Show)
 
-data Comparison = Comparison Expression Relationship Expression
+data Comparison = Comparison Relationship Expression Expression
   deriving (Eq, Show)
 
 data Sentence = IfSo Sentence          |
