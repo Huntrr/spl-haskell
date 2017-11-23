@@ -1,3 +1,5 @@
+module WordLists where
+
 firstPerson = ["I", "me"]
 
 firstPersonPossessive = ["mine", "my"]
@@ -16,7 +18,10 @@ characters = ["Achilles", "Adonis", "Adriana", "Aegeon", "Aemilia", "Agamemnon",
 
 negativeAdjectives = ["bad", "cowardly", "cursed", "damned", "dirty", "disgusting", "distasteful", "dusty", "evil", "fat", "fat-kidneyed", "fatherless", "foul", "hairy", "ugly", "half-witted", "horrible", "horrid", "infected", "lying", "miserable", "misused", "oozing", "rotten", "skilless", "smelly", "snotty", "sorry", "stinking", "stuffed", "stupid", "tame", "unpracticed", "vile", "villainous", "weak", "worried"]
 
-positiveAdjectives = ["amazing", "beautiful", "blossoming", "bold", "brave", "charming", "clearest", "cunning", "cute", "delicious", "nice", "embroidered", "fair", "fine", "gentle", "golden", "good", "handsome", "happy", "healthy", "honest", "lovely", "loving", "mighty", "noble", "peaceful", "pretty", "prompt", "proud", "reddest", "rich", "smooth", "sunny", "sweet", "sweetest", "trustworthy", "warm", "young"]
+-- TODO: I added "summer's" to make hello.spl pass, but that seems weird. Should I automatically add 's to nouns and make them adjectives?
+positiveAdjectives = ["amazing", "beautiful", "blossoming", "bold", "brave", "charming", "clearest", "cunning", "cute", "delicious", "nice", "embroidered", "fair", "fine", "gentle", "golden", "good", "handsome", "happy", "healthy", "honest", "lovely", "loving", "mighty", "noble", "peaceful", "pretty", "prompt", "proud", "reddest", "rich", "smooth", "sunny", "sweet", "sweetest", "trustworthy", "warm", "young", "summer's"]
+
+adjectives = neutralAdjectives ++ negativeAdjectives ++ positiveAdjectives
 
 negativeComparators = ["punier", "smaller", "worse", "uglier"]
 
@@ -28,6 +33,8 @@ firstPersonReflexive = ["myself"]
 
 secondPerson = ["thee", "thou", "you"]
 
+-- TODO: I had to switch the order of an and a here to get tests to pass, which
+-- I don't like at all. How can I make sure we keep going even if it fails earlier.
 articles = ["a", "an", "the"]
 
 secondPersonPossessive = ["thine", "thy", "your"]

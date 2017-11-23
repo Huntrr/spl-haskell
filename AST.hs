@@ -16,7 +16,8 @@ data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
-type Annotation = (String, Int)
+-- type Annotation = (String, Int)
+type Annotation = String
 data Exception = DivideByZero |
                  EmptyStack deriving (Eq, Show)
 
@@ -32,7 +33,7 @@ data Scene = Scene Description [(Statement, Annotation)] deriving (Eq, Show)
 data Statement = Enter [CName]  |
                  Exit CName     |
                  Exeunt [CName] |
-                 Line Character Sentence
+                 Line CName Sentence
                  deriving (Eq, Show)
 
 type Value = Int
@@ -44,6 +45,7 @@ data Expression = Constant Value                   |
                   Sum        Expression Expression |
                   Difference Expression Expression |
                   Product    Expression Expression |
+                  Quotient   Expression Expression |
                   Square     Expression            |
                   Cube       Expression            |
                   SquareRoot Expression            |
