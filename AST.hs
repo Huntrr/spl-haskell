@@ -17,15 +17,18 @@ data Character = Character CName Description deriving (Eq, Show)
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
 type Annotation = (String, Int)
-data Exception = DivideByZero |
-                 EmptyStack deriving (Eq, Show)
+data Exception = DivideByZero Annotation |
+                 EmptyStack Annotation   |
+                 InvalidAct Label        |
+                 InvalidScene Label deriving (Eq, Show)
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
 data Program = Program Header (Map.Map Label Act) deriving (Eq, Show)
 data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
-data Scene = Scene Description [(Statement, Annotation)] deriving (Eq, Show)
+type Block = [(Statement, Annotation)]
+data Scene = Scene Description Block deriving (Eq, Show)
 
 -- TODO: for Enter/Exit, it must be a list of 1 or more characters. We can statically
 -- enforce that with a slightly different list type.
