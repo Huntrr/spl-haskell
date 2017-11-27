@@ -18,9 +18,11 @@ data Character = Character CName Description deriving (Eq, Show)
 -- debugging
 type Annotation = (String, Int)
 data Exception = DivideByZero Annotation              |
+                 UnrealAnswer Annotation              |
                  EmptyStack Annotation                |
                  NotOnStage CName Annotation          |
                  AlreadyOnStage CName Annotation      |
+                 UndefinedCondition Annotation        |
                  InvalidAct Label                     |
                  InvalidScene Label deriving (Eq, Show)
 

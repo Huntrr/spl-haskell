@@ -9,7 +9,7 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import Control.Monad.State (MonadState(..), StateT, State, runState, runStateT)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.Cont (MonadCont(..), ContT, Cont, runCont, runContT)
@@ -18,16 +18,16 @@ import Control.Monad.Cont (MonadCont(..), ContT, Cont, runCont, runContT)
 import AST
 
 -- TODO: Store will probably change
-data Store = Store { variables     :: Map CName Value
-                   , onStage   :: Set CName
-                   , condition     :: Bool
+data Store = Store { variables     :: Map CName [Value]
+                   , onStage       :: Set CName
+                   , condition     :: Maybe Bool
                    , output        :: Maybe Char
                    , awaitingInput :: Maybe (CName, InputType)
                    , act           :: Label
                    , scene         :: Label
                    } deriving (Eq, Show)
 
-emptyState = Store Map.empty Set.empty False Nothing Nothing "I" "I"
+emptyState = Store Map.empty Set.empty Nothing Nothing Nothing "I" "I"
 
 data InputType = InChar | InInt deriving (Eq, Show)
 data Partial a = Fail Exception | Complete | Continue (a, Store) | Start Store
@@ -36,18 +36,77 @@ data Partial a = Fail Exception | Complete | Continue (a, Store) | Start Store
 -- Alternative Triple idea... Either Error, State, or BLOCK!
 type M a = ExceptT Exception (StateT Store (Cont (Partial a))) a
 
-evalExpression :: (MonadError Exception m, MonadState Store m) =>
-  Expression -> Annotation -> m Value
-evalExpression = undefined
+evalExpression :: forall m. (MonadError Exception m, MonadState Store m) =>
+  Annotation -> Expression -> m Value
+evalExpression a = eval where
+  eval :: Expression -> m Value
+  eval (Constant x)       = return x
+  eval (Sum e1 e2)        = bop (+) e1 e2
+  eval (Difference e1 e2) = bop (-) e1 e2
+  eval (Product e1 e2)    = bop (*) e1 e2
+  eval (Square e)         = op (^2) e
+  eval (Cube e)           = op (^3) e
+  eval (SquareRoot e)     = do
+    v <- eval e
+    when (v < 0) (throwError $ UnrealAnswer a)
+    return $ (floor . sqrt . fromIntegral) v
+  eval (Twice e)          = op (2*) e
+  eval (Var ref)          = undefined
 
-evalSentence :: (MonadCont m, MonadError Exception m, MonadState Store m) =>
+  bop f e1 e2 = do
+    v1 <- eval e1
+    v2 <- eval e2
+    return $ f v1 v2
+  op f e = do
+    v <- eval e
+    return $ f v
+
+evalComparison :: forall m. (MonadError Exception m, MonadState Store m) =>
+  Annotation -> Comparison -> m Bool
+evalComparison a (Comparison e1 r e2) = do
+  v1 <- evalExpression a e1
+  v2 <- evalExpression a e2
+  return $ (op r) v1 v2 where
+
+  op Lt = (<)
+  op Le = (<=)
+  op E  = (==)
+  op Ne = (/=)
+  op Gt = (>)
+  op Ge = (>=)
+
+evalSentence :: forall m.
+  (MonadCont m, MonadError Exception m, MonadState Store m) =>
   (() -> m (Maybe Block))
   -> (Label -> m (Maybe Label))
   -> (Label -> m (Maybe Label))
   -> Annotation -> CName -> Sentence -> m ()
 evalSentence handleIO gotoAct gotoScene a cname = eval where
   eval :: Sentence -> m ()
-  eval sentence = undefined
+  eval (IfSo sentence) = do
+    state <- get
+    case condition state of
+      Nothing -> throwError $ UndefinedCondition a
+      Just b  -> when b (eval sentence)
+  eval OutputNumber    = undefined
+  eval OutputCharacter = undefined
+  eval InputCharacter  = input cname InChar
+  eval InputNumber     = input cname InInt
+  eval (Declaration e) = undefined
+  eval Push            = undefined
+  eval Pop             = undefined
+  eval (GotoScene l)   = gotoScene l >> return ()
+  eval (GotoAct l)     = gotoAct l >> return ()
+  eval (Conditional c) = do
+    state <- get
+    cond <- evalComparison a c
+    put $ state { condition = Just cond }
+
+  input cname t = do
+    state <- get
+    put $ state { awaitingInput = Just (cname, t) }
+    handleIO ()
+    return ()
 
 evalStatement :: forall m.
   (MonadCont m, MonadError Exception m, MonadState Store m) =>
