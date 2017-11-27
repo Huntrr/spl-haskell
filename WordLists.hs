@@ -33,12 +33,11 @@ firstPersonReflexive = ["myself"]
 
 secondPerson = ["thee", "thou", "you"]
 
--- TODO: I had to switch the order of an and a here to get tests to pass, which
--- I don't like at all. How can I make sure we keep going even if it fails earlier.
 articles = ["a", "an", "the"]
 
 secondPersonPossessive = ["thine", "thy", "your"]
 
 thirdPersonPossessive = ["his", "her", "its", "their"]
 
-positiveComparators = ["better", "bigger", "fresher", "friendlier", "jollier", "nicer"]
+-- TODO: I had to add "more cunning" to make primes.spl pass. Should more + adjective always work?
+positiveComparators = ["better", "bigger", "fresher", "friendlier", "jollier", "nicer", "more cunning"]

@@ -1,22 +1,26 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
-    FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeSynonymInstances      #-}
     -- TODO: remove defer type errors
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns -fdefer-type-errors #-}
 
 module LanguageParser where
 
-import qualified Text.Megaparsec as P
+import           Control.Applicative
+import           Data.Char            (isAlpha, isPunctuation, isSpace)
+import qualified Data.Map.Lazy        as Map
+import           Data.Tuple
+import           Data.Void
+import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
-import qualified Data.Map.Lazy as Map
-import Data.Char (isSpace, isAlpha, isPunctuation)
-import Control.Applicative
-import Data.Void
-import Data.Tuple
-import qualified WordLists as W
+import qualified WordLists            as W
 
-import AST
+import           AST
 
 type Parser = P.Parsec Void String
+
+-- TODO: Parse 'nothing' to make primes.spl pass?
 
 -- Like manyTill but includes c
 tillInclC :: Char -> Parser String
@@ -24,99 +28,103 @@ tillInclC c = liftA2 (++) (P.many (P.noneOf [c])) (P.string [c])
 
 -- TODO: use endBy?
 tillNoInclC :: Char -> Parser String
-tillNoInclC c = (P.many (P.noneOf [c])) <* (P.string [c])
+tillNoInclC c = P.many (P.noneOf [c]) <* P.string [c]
 
 -- TODO: characters are case insensitive for sure, see "the ghost" in primes
--- TODO: this also makes sure word terminates
 oneOfString' :: [String] -> Parser String
--- TODO: Used to be
--- oneOfString' l = P.choice (P.string' <$> l)
-oneOfString' l = P.choice ((\s -> P.try ((P.string' s) <* (P.notFollowedBy P.letterChar))) <$> l)
+oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
+                 P.notFollowedBy P.letterChar)) <$> l)
 
--- TODO: this will parse 'Ben' as a character even though that's not valid. Should we
--- enforce that in the parser?
+oneOfCharacterNames :: Parser String
+oneOfCharacterNames = oneOfString' W.characters P.<?>
+                      "Expecting a valid Shakespeare character"
+
+oneOfSecondPersonPos :: Parser String
+oneOfSecondPersonPos = oneOfString' W.secondPersonPossessive
+
 characterP :: Parser Character
-characterP = liftA2 Character ((oneOfString' W.characters) <* P.space <* P.char ',' <* P.space) (tillInclC '.' <* P.space)
+characterP = liftA2 Character
+             (oneOfCharacterNames <* P.space <* P.char ',' <* P.space)
+             (tillInclC '.' <* P.space)
+             P.<?> "Not a valid Character declaration"
 
+-- TODO: Replace with something more real.
 testParse file = P.runParser programP file <$> readFile file
 
--- TODO: add EOF
 programP :: Parser Program
-programP = liftA2 Program headerP (Map.fromList <$> many actP)
+programP = liftA2 Program headerP (Map.fromList <$> many actP) <* P.eof
 
 headerP :: Parser Header
-headerP = liftA2 Header (tillInclC '.' <* P.space) (P.many characterP <* P.space)
+headerP = liftA2 Header (tillInclC '.' <* P.space)
+          (P.many characterP <* P.space)
+          P.<?> "Not a valid header"
 
 actP :: Parser (Label, Act)
-actP = liftA3 helper (P.string' "Act" *> P.space1 *> (tillNoInclC ':') <* P.space1) (tillInclC '.' <* P.space) (Map.fromList <$> many sceneP)
-       where
-         helper lab desc mp = (lab, (Act desc mp))
+actP = liftA3 (\lab desc mp -> (lab, Act desc mp))
+       (P.string' "Act" *> P.space1 *> tillNoInclC ':' <* P.space1)
+       (tillInclC '.' <* P.space)
+       (Map.fromList <$> many sceneP)
 
 sceneP :: Parser (Label, Scene)
 -- TODO: case insensitive!
 -- TODO: the P.try for listOfStatementP is necessary
-sceneP = liftA3 helper (P.string' "Scene" *> P.space1 *> (tillNoInclC ':') <* P.space1) (tillInclC '.' <* P.space) (concat <$> many (P.try listOfStatementP))
-         where
-           helper lab desc list = (lab, (Scene desc list))
-
--- TODO: just missing annotation
--- TODO: the P.try is necessary
--- almostSceneP :: Parser [Statement]
--- almostSceneP = concat <$> many (P.try listOfStatementP)
-
--- TODO: remove
--- statementP :: Parser Statement
--- statementP = P.try enterP <|>
---              P.try exitP <|>
---              P.try exeuntP <|>
---              lineP
+sceneP = liftA3 (\lab desc list -> (lab, Scene desc list))
+         (P.string' "Scene" *> P.space1 *> tillNoInclC ':' <* P.space1)
+         (tillInclC '.' <* P.space)
+         (concat <$> many (P.try listOfStatementP))
 
 listOfStatementP :: Parser [(Statement, Annotation)]
-listOfStatementP = P.try ((:[]) <$> enterP') <|>
-                   P.try ((:[]) <$> exitP') <|>
-                   P.try ((:[]) <$> exeuntP') <|>
+listOfStatementP = P.try ((:[]) <$> enterP) <|>
+                   P.try ((:[]) <$> exitP) <|>
+                   P.try ((:[]) <$> exeuntP) <|>
                    lineP
 
-enterP' :: Parser (Statement, Annotation)
-enterP' = swap <$> liftA2 (,) (P.try (P.lookAhead (P.char '[' *> parseNoEndBracket))) enterP
+enterExitAnnotationP :: Parser Annotation
+enterExitAnnotationP = P.try (P.lookAhead (P.char '[' *> parseNoEndBracket))
 
-enterP :: Parser Statement
--- TODO: string' is case insensitive
--- enterP = P.between (char '[') (sepBy1 P.anyChar P.space *> P.string "and" <* P.space) (char ']')
-enterP = Enter <$> (P.char '[' *> P.space *> P.string' "Enter" *> P.space1 *> (P.try double <|> single) <* P.space <* (P.char ']') <* P.space)
+enterP :: Parser (Statement, Annotation)
+enterP = swap <$> liftA2 (,) enterExitAnnotationP enterP'
+         where
+            enterP' = Enter <$> (P.char '[' *> P.space *> P.string' "Enter" *>
+                      P.space1 *> (P.try double <|> single) <* P.space <*
+                      P.char ']' <* P.space)
 
-exitP' :: Parser (Statement, Annotation)
-exitP' = swap <$> liftA2 (,) (P.try (P.lookAhead (P.char '[' *> parseNoEndBracket))) exitP
+exitP :: Parser (Statement, Annotation)
+exitP = swap <$> liftA2 (,) enterExitAnnotationP exitP'
+         where
+           exitP' = Exit <$> (P.char '[' *> P.space *> P.string' "Exit" *>
+                    P.space1 *> oneOfCharacterNames <* P.space <*
+                    P.char ']' <* P.space)
 
-exitP :: Parser Statement
-exitP = Exit <$> (P.char '[' *> P.space *> P.string' "Exit" *> P.space1 *> (oneOfString' W.characters) <* P.space <* (P.char ']') <* P.space)
-
-exeuntP' :: Parser (Statement, Annotation)
-exeuntP' = swap <$> liftA2 (,) (P.try (P.lookAhead (P.char '[' *> parseNoEndBracket))) exeuntP
-
-exeuntP :: Parser Statement
-exeuntP = Exeunt <$> (P.char '[' *> P.space *> P.string' "Exeunt" *> (P.try (P.space1 *> double) <|> none) <* P.space <* (P.char ']') <* P.space)
+exeuntP :: Parser (Statement, Annotation)
+exeuntP = swap <$> liftA2 (,) enterExitAnnotationP exeuntP'
+           where
+             exeuntP' = Exeunt <$> (P.char '[' *> P.space *> P.string'
+                        "Exeunt" *> (P.try (P.space1 *> double) <|> none) <*
+                        P.space <* P.char ']' <* P.space)
 
 none :: Parser [String]
-none = const [] <$> (P.takeP Nothing 0)
+none = const [] <$> P.takeP Nothing 0
 
 single :: Parser [String]
-single = (:[]) <$> (oneOfString' W.characters) <* P.space
+single = (:[]) <$> oneOfCharacterNames <* P.space
 
+-- TODO: Need to handle three, four, five, etc.
 double :: Parser [String]
-double = (liftA2 (\a b -> [a, b]) ((oneOfString' W.characters) <* P.space1 <* P.string "and" <* P.space1) ((oneOfString' W.characters) <* P.space))
+double = liftA2 (\a b -> [a, b]) (oneOfCharacterNames <* P.space1 <* P.string "and" <* P.space1) (oneOfCharacterNames <* P.space)
 
 lineP :: Parser [(Statement, Annotation)]
--- (Line Character) ([(Sentence, Annotation)])
-lineP = liftA2 helper (Line <$> (oneOfString' (W.characters)) <* P.char ':' <* P.space) listOfSentenceP <* P.space
+lineP = liftA2 combine (Line <$> oneOfCharacterNames <* P.char ':' <* P.space)
+        listOfSentenceP <* P.space
         where
-          helper line senAnnList = (\(s, a) -> (line s, a)) <$> senAnnList
+          combine line senAnnList = (\(s, a) -> (line s, a)) <$> senAnnList
 
 listOfSentenceP :: Parser [(Sentence, Annotation)]
 -- TODO: this is this way because the last one will fail because it will be
 -- either Character: or Act I: so try pretends like it never parsed.
 -- listOfSentenceP = some (P.try sentenceP)
-listOfSentenceP = some (sentenceP)
+-- TODO: is the above true anymore ^? I don't think so.
+listOfSentenceP = some sentenceP
 
 parseNoPunc :: Parser String
 parseNoPunc = P.takeWhileP Nothing (not . isPunctuation)
@@ -124,66 +132,68 @@ parseNoPunc = P.takeWhileP Nothing (not . isPunctuation)
 parseNoEndBracket :: Parser String
 parseNoEndBracket = P.takeWhileP Nothing (/= ']')
 
+-- TODO: Again, all is case insensitive.
+ifSoP :: Parser Sentence
+ifSoP = IfSo <$> (P.string' "If so" *> P.space *> P.char ',' *> P.space *> sentenceP')
+
+outputNumberP :: Parser Sentence
+outputNumberP = constP OutputNumber (P.string' "Open" <* P.space1 <* oneOfSecondPersonPos <* P.space1 <* P.string' "heart")
+
+outputCharacterP :: Parser Sentence
+outputCharacterP = constP OutputCharacter (P.string' "Speak" <* P.space1 <* oneOfSecondPersonPos <* P.space1 <* P.string' "mind")
+
+inputNumberP :: Parser Sentence
+inputNumberP = constP InputNumber (P.string' "Listen" <* P.space1 <* P.string "to" <* P.space1 <* oneOfSecondPersonPos <* P.space1 <* P.string' "heart")
+
+inputCharacterP :: Parser Sentence
+inputCharacterP = constP InputCharacter (P.string' "Open" <* P.space1 <* oneOfSecondPersonPos <* P.space1 <* P.string' "mind")
+
+declarationP :: Parser Sentence
+declarationP = P.try decVarient1 <|> decVarient2
+               where
+                 decVarient1 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *> oneOfString' W.be *> P.space1 *> P.string' "as" *> P.space1 *> oneOfString' W.adjectives *> P.space1 *> P.string' "as" *> P.space1 *> expressionP)
+                 decVarient2 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *> expressionP)
+pushP :: Parser Sentence
+pushP = constP Push (P.string' "Remember me")
+
+-- TODO same punctuation issue as maybe above
+-- TODO: refactor not is punc into own function
+popP :: Parser Sentence
+popP = (constP Pop (P.string' "Recall")) <* P.takeWhileP Nothing (not . isPunctuation)
+
+genericGoTo :: (String -> Sentence) -> String -> Parser Sentence
+genericGoTo con s = con <$> ((oneOfString' ["Let us", "We shall", "We must"]) *>
+                    P.space1 *> (oneOfString' ["return to", "proceed to"]) *>
+                    P.space1 *> P.string' s *> P.space1 *> P.takeWhileP Nothing (not . isPunctuation))
+
+goToSceneP :: Parser Sentence
+goToSceneP = genericGoTo GotoScene "scene"
+
+goToActP :: Parser Sentence
+goToActP = genericGoTo GotoAct "act"
+
+-- TODO: this does NOT enforce an ending of ? right now. I think this is fine, let me know what you think.
+conditionalP :: Parser Sentence
+conditionalP = Conditional <$> comparisonP
+
+sentenceP' :: Parser Sentence
+sentenceP' = P.try ifSoP <|>
+             P.try outputNumberP <|>
+             P.try outputCharacterP <|>
+             P.try inputNumberP <|>
+             P.try inputCharacterP <|>
+             P.try declarationP <|>
+             P.try pushP <|>
+             P.try popP <|>
+             P.try goToSceneP <|>
+             P.try goToActP <|>
+             conditionalP
+             P.<?> "Excpecting a valid sentence"
+
 sentenceP :: Parser (Sentence, Annotation)
 -- TODO: will punctuationChar pass on comma? Is that cool?
-sentenceP = swap <$> liftA2 (,) (P.try (P.lookAhead parseNoPunc)) (sentencePHelper <* P.space <* P.punctuationChar <* P.space)
-            where
-              sentencePHelper :: Parser Sentence
-              sentencePHelper = P.try ifSoP <|>
-                                P.try outputNumberP <|>
-                                P.try outputCharacterP <|>
-                                P.try inputNumberP <|>
-                                P.try inputCharacterP <|>
-                                P.try declarationP <|>
-                                P.try pushP <|>
-                                P.try popP <|>
-                                P.try goToSceneP <|>
-                                P.try goToActP <|>
-                                conditionalP
-
-              -- TODO: Again, all is case insensitive.
-              ifSoP :: Parser Sentence
-              ifSoP = IfSo <$> (P.string' "If so" *> P.space *> P.char ',' *> P.space *> sentencePHelper)
-
-              outputNumberP :: Parser Sentence
-              outputNumberP = constP OutputNumber (P.string' "Open" <* P.space1 <* (oneOfString' W.secondPersonPossessive) <* P.space1 <* P.string' "heart")
-
-              outputCharacterP :: Parser Sentence
-              outputCharacterP = constP OutputCharacter (P.string' "Speak" <* P.space1 <* (oneOfString' W.secondPersonPossessive) <* P.space1 <* P.string' "mind")
-
-              inputNumberP :: Parser Sentence
-              inputNumberP = constP InputNumber (P.string' "Listen" <* P.space1 <* P.string "to" <* P.space1 <* (oneOfString' W.secondPersonPossessive) <* P.space1 <* P.string' "heart")
-
-              inputCharacterP :: Parser Sentence
-              inputCharacterP = constP InputCharacter (P.string' "Open" <* P.space1 <* (oneOfString' W.secondPersonPossessive) <* P.space1 <* P.string' "mind")
-
-              -- TODO: this actually won't work right now.
-              declarationP :: Parser Sentence
-              declarationP = P.try (Declaration <$> ((oneOfString' W.secondPerson) *> P.space1 *> (oneOfString' W.be) *> P.space1 *> P.string' "as" *> P.space1 *> oneOfString' W.adjectives *> P.space1 *> P.string' "as" *> P.space1 *> expressionP)) <|>
-                             Declaration <$> ((oneOfString' W.secondPerson) *> P.space1 *> expressionP)
-
-              pushP :: Parser Sentence
-              pushP = constP Push (P.string' "Remember me")
-
-              -- TODO same punctuation issue as maybe above
-              -- TODO: refactor not is punc into own function
-              popP :: Parser Sentence
-              popP = (constP Pop (P.string' "Recall")) <* P.takeWhileP Nothing (not . isPunctuation)
-
-              genericGoTo :: (String -> Sentence) -> String -> Parser Sentence
-              genericGoTo con s = con <$> ((oneOfString' ["Let us", "We shall", "We must"]) *>
-                                  P.space1 *> (oneOfString' ["return to", "proceed to"]) *>
-                                  P.space1 *> P.string' s *> P.space1 *> P.takeWhileP Nothing (not . isPunctuation))
-
-              goToSceneP :: Parser Sentence
-              goToSceneP = genericGoTo GotoScene "scene"
-
-              goToActP :: Parser Sentence
-              goToActP = genericGoTo GotoAct "act"
-
-              -- TODO: this does NOT enforce an ending of ? right now. I think this is fine, let me know what you think.
-              conditionalP :: Parser Sentence
-              conditionalP = Conditional <$> comparisonP
+sentenceP = swap <$> liftA2 (,) (P.try (P.lookAhead parseNoPunc))
+            (sentenceP' <* P.space <* P.punctuationChar <* P.space)
 
 comparisonP :: Parser Comparison
 comparisonP = P.try equalsP <|>

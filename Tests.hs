@@ -143,7 +143,9 @@ testParseComparison =
       P.parse comparisonP "" "Am I not better than you?"
         ~?= Right (Comparison Le (Var "I") (Var "you")),
       P.parse comparisonP "" "Is a disgusting leech not better than thee?"
-        ~?= Right (Comparison Le (Constant (-2)) (Var "thee"))
+        ~?= Right (Comparison Le (Constant (-2)) (Var "thee")),
+      P.parse comparisonP "" "Art thou more cunning than the Ghost?"
+        ~?= Right (Comparison Gt (Var "thou") (Var "the Ghost"))
     ]
 
 parseUnwrap :: String -> Sentence
