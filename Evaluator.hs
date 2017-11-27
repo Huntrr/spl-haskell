@@ -40,15 +40,14 @@ evalExpression :: (MonadError Exception m, MonadState Store m) =>
   Expression -> Annotation -> m Value
 evalExpression = undefined
 
-evalSentence :: forall m.
-  (MonadCont m, MonadError Exception m, MonadState Store m) =>
+evalSentence :: (MonadCont m, MonadError Exception m, MonadState Store m) =>
   (() -> m (Maybe Block))
   -> (Label -> m (Maybe Label))
   -> (Label -> m (Maybe Label))
-  Annotation -> Character -> Sentence -> m ()
-evalSentence handleIO gotoAct gotoScene a = eval where
-  eval :: CName -> Sentence -> m ()
-  eval char sentence = undefined
+  -> Annotation -> CName -> Sentence -> m ()
+evalSentence handleIO gotoAct gotoScene a cname = eval where
+  eval :: Sentence -> m ()
+  eval sentence = undefined
 
 evalStatement :: forall m.
   (MonadCont m, MonadError Exception m, MonadState Store m) =>
@@ -62,8 +61,8 @@ evalStatement handleIO gotoAct gotoScene (s, a) = eval s where
   eval (Enter cnames)        = forM_ cnames enterChar
   eval (Exit cname)          = exitChar cname
   eval (Exeunt cnames)       = forM_ cnames exitChar
-  eval (Line cname sentence) = evalSentence handleIO gotoAct gotoScene a
-                                 cname sentence
+  eval (Line cname sentence) = evalSentence handleIO gotoAct gotoScene a cname
+                                sentence
 
   getCharSet = do
     state <- get
