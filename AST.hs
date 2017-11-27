@@ -16,7 +16,6 @@ data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
-type Annotation = (String, Int)
 data Exception = DivideByZero Annotation              |
                  UnrealAnswer Annotation              |
                  EmptyStack Annotation                |
@@ -25,6 +24,9 @@ data Exception = DivideByZero Annotation              |
                  UndefinedCondition Annotation        |
                  InvalidAct Label                     |
                  InvalidScene Label deriving (Eq, Show)
+
+-- type Annotation = (String, Int)
+type Annotation = String
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
@@ -51,6 +53,7 @@ data Expression = Constant Value                   |
                   Sum        Expression Expression |
                   Difference Expression Expression |
                   Product    Expression Expression |
+                  Quotient   Expression Expression |
                   Square     Expression            |
                   Cube       Expression            |
                   SquareRoot Expression            |
@@ -59,7 +62,7 @@ data Expression = Constant Value                   |
 
 data Relationship = Lt | Le | E | Ne | Gt | Ge deriving (Eq, Show)
 
-data Comparison = Comparison Expression Relationship Expression
+data Comparison = Comparison Relationship Expression Expression
   deriving (Eq, Show)
 
 data Sentence = IfSo Sentence          |
