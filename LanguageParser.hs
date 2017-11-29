@@ -35,6 +35,9 @@ oneOfString' :: [String] -> Parser String
 oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
                  P.notFollowedBy P.letterChar)) <$> l)
 
+constP :: a -> Parser b -> Parser a
+constP a p = const a <$> (p <* P.space)
+
 oneOfCharacterNames :: Parser String
 oneOfCharacterNames = oneOfString' W.characters P.<?>
                       "Expecting a valid Shakespeare character"
@@ -227,9 +230,6 @@ comparisonP = P.try equalsP <|>
                 greaterThanEqualsP :: Parser Comparison
                 greaterThanEqualsP = genericComparison Ge (P.string "not" <* P.space1 <* oneOfString' W.negativeComparators <* P.space1 <* P.string' "than" <* P.space1)
 
-constP :: a -> Parser b -> Parser a
-constP a p = const a <$> (p <* P.space)
-
 expressionP :: Parser Expression
 expressionP = P.try varP <|>
               P.try constantP <|>
@@ -299,7 +299,14 @@ twiceP = unOp Twice "twice"
 -- TODO: doesn't work for multi-word characters yet
 varP :: Parser Expression
 -- TODO: second person because of comparisons "Am I better than you?"
-varP = Var <$> (oneOfString' (W.characters ++ W.secondPersonReflexive ++ W.firstPersonReflexive ++ W.firstPerson ++ W.secondPerson) <* P.space)
+varP = Var <$> referenceP <* P.space
 -- varP = Var <$> ((some P.anyChar) <* P.space)
 -- TODO: punctuation is incomplete
 -- varP = Var <$> P.manyTill P.anyChar (P.lookAhead (P.space *> (oneOfString' ["and", ".", "?", "!"])))
+
+referenceP :: Parser Reference
+referenceP = (P.try youP <|> P.try meP <|> theyP) <* P.space
+             where
+               youP = constP You (oneOfString' (W.secondPersonReflexive ++ W.secondPerson))
+               meP = constP Me (oneOfString' (W.firstPersonReflexive ++ W.firstPerson))
+               theyP = They <$> oneOfString' W.characters

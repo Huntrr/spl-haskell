@@ -1,26 +1,30 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
-    FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeSynonymInstances      #-}
 -- TODO: remove -fdefer-type-errors
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns -fdefer-type-errors #-}
 
 module Tests where
 
-import Test.HUnit (runTestTT,Test(..),Assertion, (~?=), (~:), assert,
-  assertFailure)
-import Test.QuickCheck (Arbitrary(..), Testable(..), Gen, elements,
-  oneof, frequency, sized, quickCheckWith, stdArgs, maxSize,
-  classify,  maxSuccess, listOf, resize, scale, (==>))
+import           Test.HUnit           (Assertion, Test (..), assert,
+                                       assertFailure, runTestTT, (~:), (~?=))
+import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
+                                       classify, elements, frequency, listOf,
+                                       maxSize, maxSuccess, oneof,
+                                       quickCheckWith, resize, scale, sized,
+                                       stdArgs, (==>))
 
-import Data.Map (Map)
-import qualified Data.Map as Map
-import qualified Text.Megaparsec as P
+import           Data.Map             (Map)
+import qualified Data.Map             as Map
+import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
 
-import LanguageParser
-import AST
-import Evaluator
-import PrettyPrinter
-import Data.Either.Extra
+import           AST
+import           Data.Either.Extra
+import           Evaluator
+import           LanguageParser
+import           PrettyPrinter
 
 main :: IO ()
 main = do
@@ -39,7 +43,7 @@ quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100 }
 raises :: Program -> Exception -> Test
 s `raises` v = case (execute s emptyState) of
    (Left v',_) -> v ~?= v'
-   _            -> TestCase $ assertFailure "Error in raises"
+   _           -> TestCase $ assertFailure "Error in raises"
 
 
 ------------ Sample Programs -----------------
@@ -84,7 +88,7 @@ testParseConstant =
       P.parse constantP "" "an amazing amazing Flower" ~?= Right (Constant 4),
       P.parse constantP "" "a Pig" ~?= Right (Constant (-1)),
       P.parse constantP "" "my amazing Pig" ~?= Right (Constant (-2)),
-      P.parse constantP "" "your amazing amazing Pig" ~?= Right (Constant (-4)),
+      P.parse constantP "" "Your amazing amazing Pig" ~?= Right (Constant (-4)),
       P.parse constantP "" "amazing amazing Pig" ~?= Right (Constant (-4))
     ]
 
@@ -101,19 +105,19 @@ testParseExpression =
         ~?= Right (Constant (-64)),
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant (-4)))) (Cube (Constant (-4)))),
-      P.parse expressionP "" "Juliet" ~?= Right (Var "Juliet"),
+      P.parse expressionP "" "Juliet" ~?= Right (Var (They "Juliet")),
       -- TODO: multi-word variables don't work yet
-      P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var "the Ghost")),
+      P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the Ghost"))),
       P.parse expressionP "" "the product of Juliet and a Pig"
-        ~?= Right (Product (Var "Juliet") (Constant (-1))),
+        ~?= Right (Product (Var (They "Juliet")) (Constant (-1))),
       P.parse expressionP "" "the difference between Juliet and thyself"
-        ~?= Right (Difference (Var "Juliet") (Var "thyself")),
+        ~?= Right (Difference (Var (They "Juliet")) (Var You)),
       P.parse expressionP "" "the difference between the square of Juliet and thyself"
-        ~?= Right (Difference (Square (Var "Juliet")) (Var "thyself")),
+        ~?= Right (Difference (Square (Var (They "Juliet"))) (Var You)),
       P.parse expressionP "" "the difference between the square root of Juliet and thyself"
-        ~?= Right (Difference (SquareRoot (Var "Juliet")) (Var "thyself")),
+        ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Var You)),
       P.parse expressionP "" "the difference between the square root of Juliet and twice thyself"
-        ~?= Right (Difference (SquareRoot (Var "Juliet")) (Twice (Var "thyself")))
+        ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Twice (Var You)))
     ]
 
 testParseComparison :: Test
@@ -121,31 +125,31 @@ testParseComparison =
   TestList
     [
       P.parse comparisonP "" "Am I as good as you?"
-        ~?= Right (Comparison E (Var "I") (Var "you")),
+        ~?= Right (Comparison E (Var Me) (Var You)),
       P.parse comparisonP "" "Is summer as good as thee?"
-        ~?= Right (Comparison E (Constant 1) (Var "thee")),
+        ~?= Right (Comparison E (Constant 1) (Var You)),
       P.parse comparisonP "" "Am I worse than you?"
-        ~?= Right (Comparison Lt (Var "I") (Var "you")),
+        ~?= Right (Comparison Lt (Var Me) (Var You)),
       P.parse comparisonP "" "Is a disgusting leech uglier than thee?"
-        ~?= Right (Comparison Lt (Constant (-2)) (Var "thee")),
+        ~?= Right (Comparison Lt (Constant (-2)) (Var You)),
       P.parse comparisonP "" "Am I better than you?"
-        ~?= Right (Comparison Gt (Var "I") (Var "you")),
+        ~?= Right (Comparison Gt (Var Me) (Var You)),
       P.parse comparisonP "" "Is a disgusting leech better than thee?"
-        ~?= Right (Comparison Gt (Constant (-2)) (Var "thee")),
+        ~?= Right (Comparison Gt (Constant (-2)) (Var You)),
       P.parse comparisonP "" "Am I not as good as you?"
-        ~?= Right (Comparison Ne (Var "I") (Var "you")),
+        ~?= Right (Comparison Ne (Var Me) (Var You)),
       P.parse comparisonP "" "Is summer not as good as thee?"
-        ~?= Right (Comparison Ne (Constant 1) (Var "thee")),
+        ~?= Right (Comparison Ne (Constant 1) (Var You)),
       P.parse comparisonP "" "Am I not worse than you?"
-        ~?= Right (Comparison Ge (Var "I") (Var "you")),
+        ~?= Right (Comparison Ge (Var Me) (Var You)),
       P.parse comparisonP "" "Is a disgusting leech not uglier than thee?"
-        ~?= Right (Comparison Ge (Constant (-2)) (Var "thee")),
+        ~?= Right (Comparison Ge (Constant (-2)) (Var You)),
       P.parse comparisonP "" "Am I not better than you?"
-        ~?= Right (Comparison Le (Var "I") (Var "you")),
+        ~?= Right (Comparison Le (Var Me) (Var You)),
       P.parse comparisonP "" "Is a disgusting leech not better than thee?"
-        ~?= Right (Comparison Le (Constant (-2)) (Var "thee")),
+        ~?= Right (Comparison Le (Constant (-2)) (Var You)),
       P.parse comparisonP "" "Art thou more cunning than the Ghost?"
-        ~?= Right (Comparison Gt (Var "thou") (Var "the Ghost"))
+        ~?= Right (Comparison Gt (Var You) (Var (They "the Ghost")))
     ]
 
 parseUnwrap :: String -> Sentence
@@ -156,7 +160,7 @@ testParseSentence =
   TestList
     [
       parseUnwrap "Am I as good as you?" ~?=
-        Conditional (Comparison E (Var "I") (Var "you")),
+        Conditional (Comparison E (Var Me) (Var You)),
       parseUnwrap "Let us proceed to act III." ~?=
         GotoAct "III",
       parseUnwrap "If so, let us proceed to scene III." ~?=
@@ -168,7 +172,7 @@ testParseSentence =
       parseUnwrap "You lying stupid fatherless big smelly half-witted coward!"
         ~?= Declaration (Constant (-64)),
       parseUnwrap "You are as stupid as the difference between Juliet and thyself."
-        ~?= Declaration (Difference (Var "Juliet") (Var "thyself")),
+        ~?= Declaration (Difference (Var (They "Juliet")) (Var You)),
       parseUnwrap "Remember me!" ~?= Push,
       parseUnwrap "Recall your unhappy childhood!" ~?= Pop
     ]
