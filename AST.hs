@@ -1,5 +1,7 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
-    FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeSynonymInstances      #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
 module AST where
@@ -16,7 +18,7 @@ data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
--- type Annotation = (String, Int)
+-- TODO: change to include line number/character position/other data
 type Annotation = String
 data Exception = DivideByZero |
                  EmptyStack deriving (Eq, Show)
@@ -39,7 +41,7 @@ data Statement = Enter [CName]  |
 type Value = Int
 -- TODO: I am using Reference instead of CName because variables can be, and often
 -- are second person pronouns. They can also just be regular character names.
-type Reference = String
+data Reference = They CName | You | Me deriving (Eq, Show)
 
 data Expression = Constant Value                   |
                   Sum        Expression Expression |
