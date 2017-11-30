@@ -1,5 +1,7 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleContexts, NoMonomorphismRestriction,
-    FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE TypeSynonymInstances      #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
 module AST where
@@ -19,13 +21,14 @@ data Character = Character CName Description deriving (Eq, Show)
 data Exception = DivideByZero Annotation              |
                  UnrealAnswer Annotation              |
                  EmptyStack Annotation                |
+                 AmbiguousYou Annotation              |
                  NotOnStage CName Annotation          |
+                 UnsetCharacter CName Annotation      |
                  AlreadyOnStage CName Annotation      |
                  UndefinedCondition Annotation        |
                  InvalidAct Label                     |
                  InvalidScene Label deriving (Eq, Show)
 
--- type Annotation = (String, Int)
 type Annotation = String
 
 data Header = Header Title [Character] deriving (Eq, Show)
@@ -47,7 +50,7 @@ data Statement = Enter [CName]  |
 type Value = Int
 -- TODO: I am using Reference instead of CName because variables can be, and often
 -- are second person pronouns. They can also just be regular character names.
-type Reference = String
+data Reference = They CName | You | Me deriving (Eq, Show)
 
 data Expression = Constant Value                   |
                   Sum        Expression Expression |
@@ -71,7 +74,7 @@ data Sentence = IfSo Sentence          |
                 InputNumber            |
                 InputCharacter         |
                 Declaration Expression |
-                Push                   |
+                Push Reference         |
                 Pop                    |
                 GotoScene Label        |
                 GotoAct Label          |
