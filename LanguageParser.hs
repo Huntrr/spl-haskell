@@ -157,7 +157,7 @@ declarationP = P.try decVarient1 <|> decVarient2
                  decVarient1 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *> oneOfString' W.be *> P.space1 *> P.string' "as" *> P.space1 *> oneOfString' W.adjectives *> P.space1 *> P.string' "as" *> P.space1 *> expressionP)
                  decVarient2 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *> expressionP)
 pushP :: Parser Sentence
-pushP = constP Push (P.string' "Remember me")
+pushP = Push <$> (P.string' "Remember" *> P.space1 *> referenceP)
 
 -- TODO same punctuation issue as maybe above
 -- TODO: refactor not is punc into own function

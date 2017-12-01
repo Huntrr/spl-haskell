@@ -65,7 +65,7 @@ data Sentence = IfSo Sentence          |
                 InputNumber            |
                 InputCharacter         |
                 Declaration Expression |
-                Push                   |
+                Push Reference         |
                 Pop                    |
                 GotoScene Label        |
                 GotoAct Label          |

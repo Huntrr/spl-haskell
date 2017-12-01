@@ -173,7 +173,8 @@ testParseSentence =
         ~?= Declaration (Constant (-64)),
       parseUnwrap "You are as stupid as the difference between Juliet and thyself."
         ~?= Declaration (Difference (Var (They "Juliet")) (Var You)),
-      parseUnwrap "Remember me!" ~?= Push,
+      parseUnwrap "Remember me!" ~?= Push Me,
+      parseUnwrap "Remember Hamlet!" ~?= Push (They "Hamlet"),
       parseUnwrap "Recall your unhappy childhood!" ~?= Pop
     ]
 
