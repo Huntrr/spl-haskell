@@ -52,6 +52,7 @@ data Expression = Constant Value                   |
                   Cube       Expression            |
                   SquareRoot Expression            |
                   Twice      Expression            |
+                  Mod        Expression            |
                   Var Reference deriving (Eq, Show)
 
 data Relationship = Lt | Le | E | Ne | Gt | Ge deriving (Eq, Show)
@@ -60,6 +61,7 @@ data Comparison = Comparison Relationship Expression Expression
   deriving (Eq, Show)
 
 data Sentence = IfSo Sentence          |
+                IfNot Sentence         |
                 OutputNumber           |
                 OutputCharacter        |
                 InputNumber            |

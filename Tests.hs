@@ -31,9 +31,8 @@ main = do
    _ <- runTestTT (TestList [testParseHeader, testParseConstant,
                              testParseExpression, testParseComparison,
                              testParseSentence])
-   -- TODO: uncomment this! (it's just cluttering the output for now)
-   -- putStrLn "Testing Roundtrip property..."
-   -- quickCheckN 500 prop_roundtrip
+   putStrLn "Testing Roundtrip property..."
+   quickCheckN 500 prop_roundtrip
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
@@ -161,6 +160,8 @@ testParseSentence =
     [
       parseUnwrap "Am I as good as you?" ~?=
         Conditional (Comparison E (Var Me) (Var You)),
+      parseUnwrap "Am I as good as nothing?" ~?=
+        Conditional (Comparison E (Var Me) (Constant 0)),
       parseUnwrap "Let us proceed to act III." ~?=
         GotoAct "III",
       parseUnwrap "If so, let us proceed to scene III." ~?=
@@ -173,6 +174,10 @@ testParseSentence =
         ~?= Declaration (Constant (-64)),
       parseUnwrap "You are as stupid as the difference between Juliet and thyself."
         ~?= Declaration (Difference (Var (They "Juliet")) (Var You)),
+      parseUnwrap "You are my little pony!"
+        ~?= Declaration (Constant 2),
+      parseUnwrap "You are nothing!"
+        ~?= Declaration (Constant 0),
       parseUnwrap "Remember me!" ~?= Push Me,
       parseUnwrap "Remember Hamlet!" ~?= Push (They "Hamlet"),
       parseUnwrap "Recall your unhappy childhood!" ~?= Pop
