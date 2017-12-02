@@ -1,6 +1,5 @@
 """
-This script turns .list files into a file list.hs that contains native
-haskell lists.
+This script takes .list files and prints haskell code with those lists.
 """
 
 import glob
