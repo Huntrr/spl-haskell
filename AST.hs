@@ -6,7 +6,25 @@
 
 module AST where
 
+import Data.Map (Map)
 import qualified Data.Map.Lazy as Map
+
+import Data.Set (Set)
+import qualified Data.Set as Set
+
+
+data Store = Store { variables     :: Map CName (Value, [Value])
+                   , onStage       :: Set CName
+                   , condition     :: Maybe Bool
+                   , output        :: Maybe String
+                   , awaitingInput :: Maybe (CName, InputType)
+                   , act           :: Label
+                   , scene         :: Label
+                   } deriving (Eq, Show)
+
+emptyState = Store Map.empty Set.empty Nothing Nothing Nothing "I" "I"
+
+data InputType = InChar | InInt deriving (Eq, Show)
 
 -- Character name
 type CName = String
@@ -18,15 +36,14 @@ data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
-data Exception = DivideByZero Annotation              |
-                 UnrealAnswer Annotation              |
-                 EmptyStack Annotation                |
-                 AmbiguousYou Annotation              |
-                 NotOnStage CName Annotation          |
-                 UnsetCharacter CName Annotation      |
-                 AlreadyOnStage CName Annotation      |
-                 UndefinedCondition Annotation        |
-                 InvalidAct Label                     |
+data Exception = DivideByZero Annotation                     |
+                 UnrealAnswer Annotation                     |
+                 EmptyStack Annotation Store                 |
+                 AmbiguousYou Annotation Store               |
+                 NotOnStage CName Annotation (Set CName)     |
+                 AlreadyOnStage CName Annotation (Set CName) |
+                 UndefinedCondition Annotation Store         |
+                 InvalidAct Label                            |
                  InvalidScene Label deriving (Eq, Show)
 
 type Annotation = String
@@ -48,8 +65,6 @@ data Statement = Enter [CName]  |
                  deriving (Eq, Show)
 
 type Value = Int
--- TODO: I am using Reference instead of CName because variables can be, and often
--- are second person pronouns. They can also just be regular character names.
 data Reference = They CName | You | Me deriving (Eq, Show)
 
 data Expression = Constant Value                   |
@@ -61,7 +76,7 @@ data Expression = Constant Value                   |
                   Cube       Expression            |
                   SquareRoot Expression            |
                   Twice      Expression            |
-                  Mod        Expression            |
+                  Mod        Expression Expression |
                   Var Reference deriving (Eq, Show)
 
 data Relationship = Lt | Le | E | Ne | Gt | Ge deriving (Eq, Show)

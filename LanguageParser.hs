@@ -63,6 +63,12 @@ testParse file = do
                       print p
                       return ()
 
+parseFile file = do
+                  s <- readFile file
+                  case P.parse programP file s of
+                    Left err -> error (P.parseErrorPretty' s err)
+                    Right p -> return p
+
 programP :: Parser Program
 programP = liftA2 Program headerP (Map.fromList <$> many actP) <* P.eof
 

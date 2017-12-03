@@ -4,12 +4,16 @@
 
 module Evaluator where
 
+import Debug.Trace (trace)
+
+import Data.Char (ord, chr)
+
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, unless)
 import Control.Monad.State (MonadState(..), StateT, State, runState, runStateT)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.Cont (MonadCont(..), ContT, Cont, runCont, runContT)
@@ -18,18 +22,6 @@ import Control.Monad.Cont (MonadCont(..), ContT, Cont, runCont, runContT)
 import AST
 
 -- TODO: Store will probably change
-data Store = Store { variables     :: Map CName (Value, [Value])
-                   , onStage       :: Set CName
-                   , condition     :: Maybe Bool
-                   , output        :: Maybe String
-                   , awaitingInput :: Maybe (CName, InputType)
-                   , act           :: Label
-                   , scene         :: Label
-                   } deriving (Eq, Show)
-
-emptyState = Store Map.empty Set.empty Nothing Nothing Nothing "I" "I"
-
-data InputType = InChar | InInt deriving (Eq, Show)
 data Partial a = Fail Exception | Complete | Continue (a, Store) | Start Store
 
 -- TODO: Is this the right monad type??
@@ -44,6 +36,7 @@ evalExpression a speaker = eval where
   eval (Sum e1 e2)        = bop (+) e1 e2
   eval (Difference e1 e2) = bop (-) e1 e2
   eval (Product e1 e2)    = bop (*) e1 e2
+  eval (Mod e1 e2)        = bop mod e1 e2
   eval (Square e)         = op (^2) e
   eval (Cube e)           = op (^3) e
   eval (Quotient e1 e2)   = do
@@ -74,7 +67,7 @@ evalRef :: (MonadState Store m, MonadError Exception m) =>
   CName -> Annotation -> Reference -> m String
 evalRef a speaker = f where
   f Me  = return speaker
-  f You = getOther a
+  f You = getOther a speaker
   f (They cname) = return cname
 
 
@@ -103,14 +96,19 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
   eval (IfSo sentence) = do
     state <- get
     case condition state of
-      Nothing -> throwError $ UndefinedCondition a
+      Nothing -> throwError $ UndefinedCondition a state
       Just b  -> when b (eval sentence)
+  eval (IfNot sentence) = do
+    state <- get
+    case condition state of
+      Nothing -> throwError $ UndefinedCondition a state
+      Just b  -> unless b (eval sentence)
   eval OutputNumber     = outputInt
   eval OutputCharacter  = outputChar
   eval InputCharacter   = input InChar
   eval InputNumber      = input InInt
   eval (Declaration e)  = do
-    name  <- getOther a
+    name  <- getOther a cname
     value <- evalExpression a cname e
     state <- get
     put $ state { variables = Map.insertWith (\(v, []) (_, s) -> (v, s))
@@ -123,12 +121,12 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
      in put $ state { variables = Map.insertWith (\(x, []) (v, xs) -> (v, x:xs)) n (value, []) map}
   eval Pop              = do
     state <- get
-    name  <- getOther a
-    case Map.lookup name (variables state) of
-      Nothing         -> throwError $ UnsetCharacter cname a
-      Just (_, [])    -> throwError $ EmptyStack a
-      Just (_, (v:s)) -> 
-        put $ state { variables = Map.insert name (v, s) (variables state) }
+    name  <- getOther a cname
+    new_v <- case Map.lookup name (variables state) of
+      Nothing         -> return (0, [])
+      Just (_, [])    -> throwError $ EmptyStack a state
+      Just (_, (v:s)) -> return (v, s)
+    put $ state { variables = Map.insert name new_v (variables state) }
   eval (GotoScene l)   = gotoScene l >> return ()
   eval (GotoAct l)     = gotoAct l >> return ()
   eval (Conditional c) = do
@@ -138,15 +136,15 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
 
   outputChar = do
     state <- get
-    cname <- getOther a
+    cname <- getOther a cname
     value <- getValue a cname
-    put $ state { output = Just $ toEnum value : [] }
+    put $ state { output = Just $ chr value : "" }
     handleIO ()
     return ()
 
   outputInt = do
     state <- get
-    cname <- getOther a
+    cname <- getOther a cname
     value <- getValue a cname
     put $ state { output = Just $ show value }
     handleIO ()
@@ -154,26 +152,27 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
 
   input t = do
     state <- get
-    n <- getOther a
+    n <- getOther a cname
     put $ state { awaitingInput = Just (n, t) }
     handleIO ()
     return ()
 
-getOther :: (MonadState Store m, MonadError Exception m) => Annotation -> m String
-getOther a = do
+getOther :: (MonadState Store m, MonadError Exception m) =>
+  Annotation -> CName -> m String
+getOther a me = do
   state <- get
-  case Set.toList $ onStage state of
+  let set = (onStage state) Set.\\ (Set.singleton me)
+  case Set.toList set of
     [single] -> return single
-    _        -> throwError $ AmbiguousYou a
+    _        -> throwError $ AmbiguousYou a state
 
 getValue :: (MonadState Store m, MonadError Exception m) =>
   Annotation -> String -> m Value
 getValue a c = do
   state <- get
-  if Set.notMember c (onStage state) then throwError $ NotOnStage c a else
-    case Map.lookup c (variables state) of
-      Nothing     -> throwError $ UnsetCharacter c a
-      Just (v, _) -> return v
+  case Map.lookup c (variables state) of
+    Nothing     -> return 0
+    Just (v, _) -> return v
 
 
 evalStatement :: forall m.
@@ -199,13 +198,13 @@ evalStatement handleIO gotoAct gotoScene (s, a) = eval s where
     put $ state { onStage = newSet }
   exitChar cname  = do
     set <- getCharSet
-    if Set.notMember cname set then throwError (NotOnStage cname a) else
+    if Set.notMember cname set then throwError (NotOnStage cname a set) else
       putCharSet $ Set.delete cname set
   -- TODO: prevent characters not in the play from entering ??
   enterChar cname = do
     set <- getCharSet
-    if Set.member cname set then throwError (AlreadyOnStage cname a) else
-      putCharSet $ Set.delete cname set
+    if Set.member cname set then throwError (AlreadyOnStage cname a set) else
+      putCharSet $ Set.insert cname set
 
 executeBlock :: forall m.
   (MonadState Store m, MonadCont m, MonadError Exception m) =>
@@ -221,6 +220,8 @@ executeBlock b handleIO gotoAct nextScene gotoScene = go b where
   go (s:rest) = do
     evalStatement (\() -> handleIO (Just rest))
       (gotoAct . Just) (gotoScene . Just) s
+    -- state <- get
+    -- trace (show s ++ "\n\t" ++ show state ++ "\n\n\n") (go rest)
     go rest
 
 executeScene :: (MonadState Store m, MonadCont m, MonadError Exception m) =>
@@ -237,7 +238,7 @@ executeScene map b handleIO nextAct gotoAct = do
       mNext = if Map.notMember next map then Nothing else Just next in
     case Map.lookup s map of
       Nothing -> throwError (InvalidScene s)
-      Just (Scene _ block) -> do
+      Just (Scene _ block) ->
         case b of
           Nothing -> executeScene map (Just block) handleIO nextAct gotoAct
           Just block' -> do
@@ -257,7 +258,7 @@ executeAct :: (MonadState Store m, MonadCont m, MonadError Exception m) =>
 executeAct map b handleIO = do
   state <- get
   let a = act state
-      next = nextLabel (a)
+      next = nextLabel a
       mNext = if Map.notMember next map then Nothing else Just next in
     case Map.lookup a map of
       Nothing -> throwError (InvalidAct a)
@@ -267,8 +268,10 @@ executeAct map b handleIO = do
           Nothing -> return Nothing
           Just a  -> do
             state' <- get
-            put $ state' { act = a }
+            put $ state' { act = a, scene = firstScene, onStage = Set.empty }
             executeAct map Nothing handleIO
+
+firstScene = "I"
 
 nextLabel :: Label -> Label
 nextLabel "I" = "II"
@@ -286,13 +289,13 @@ continueFixed :: Map Label Act -> Block -> [Char] -> [Char]
 continueFixed = undefined
 
 continueIO :: Map Label Act -> Partial (Maybe Block) -> IO ()
-continueIO actMap partial = go partial where
+continueIO actMap = go where
   go :: Partial (Maybe Block) -> IO ()
   go (Fail e) = do
     putStrLn $ "Exception: " ++ (show e)
     return ()
   go Complete = do
-    putStrLn $ "Execution complete"
+    putStrLn $ "\nExecution complete"
     return ()
   go (Start state) = go $ Continue (Nothing, state)
   go (Continue (block, state)) = do
@@ -314,13 +317,16 @@ continueIO actMap partial = go partial where
   readInput Nothing m = return m
   readInput (Just (cname, InChar)) m = do
     c <- getChar
-    return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (fromEnum c, []) m
+    let val = case c of
+              '\n' -> -1
+              _    -> ord c in
+      return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) m
   readInput (Just (cname, InInt))  m = do
     i <- getLine
     return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (read i, []) m
 
 runM :: M a -> Store -> ((Either Exception a, Store) -> Partial a) -> Partial a
-runM m s f = runCont (runStateT (runExceptT m) s) f
+runM m s = runCont (runStateT (runExceptT m) s)
 
 runIO :: Program -> IO ()
 runIO (Program _ actMap) = continueIO actMap (Start emptyState)
