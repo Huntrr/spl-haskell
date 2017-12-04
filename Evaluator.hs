@@ -291,8 +291,36 @@ nextLabel "VIII" = "IX"
 nextLabel "IX" = "X"
 nextLabel _ = undefined
 
-continueFixed :: Map Label Act -> Block -> [Char] -> [Char]
-continueFixed = undefined
+continueFixed :: Map Label Act -> Partial (Maybe Block) -> [String] -> String
+continueFixed actMap = go [] where
+  go :: String -> Partial (Maybe Block) -> [String] -> [Char]
+  go _ (Fail e) _   = "Exception: " ++ (show e)
+  go res Complete _ = res ++ "\n"
+  go res (Start state) input = go res (Continue (Nothing, state)) input
+  go res (Continue (block, state)) input = go
+    (res ++ out)
+    next
+    input'
+
+    where
+      out         = case output state of
+                      Nothing -> ""
+                      Just s  -> s
+      (input', vars) = case awaitingInput state of
+                         Nothing         -> (input, variables state)
+                         Just (cname, t) ->
+                           case input of
+                             i:nput ->
+                               let val = case t of
+                                           InInt -> (read i :: Int)
+                                           InChar -> case i of
+                                                       c:_ -> if c == '\n' then -1 else ord c
+                                                       _   -> error "Invalid input"
+                                in (nput, Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) (variables state))
+                             _ -> error "Not enough inputs"
+
+      next = runM (callCC $ executeAct actMap block)
+             (updateState state vars) cont
 
 continueIO :: Map Label Act -> Partial (Maybe Block) -> IO ()
 continueIO actMap = go where
@@ -310,14 +338,6 @@ continueIO actMap = go where
     go $ runM (callCC $ executeAct actMap block)
          (updateState state variables') cont
     
-  cont :: (Either Exception (Maybe Block), Store) -> Partial (Maybe Block)
-  cont (Left e, _)                 = Fail e
-  cont (Right Nothing, state)      = Complete
-  cont (Right (Just block), state) = Continue (Just block, state)
-
-  updateState state vars = state { output = Nothing
-                                 , awaitingInput = Nothing
-                                 , variables = vars }
   putOutput Nothing  = return ()
   putOutput (Just c) = putStr c
   readInput Nothing m = return m
@@ -331,8 +351,22 @@ continueIO actMap = go where
     i <- getLine
     return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (read i, []) m
 
+
+cont :: (Either Exception (Maybe Block), Store) -> Partial (Maybe Block)
+cont (Left e, _)                 = Fail e
+cont (Right Nothing, state)      = Complete
+cont (Right (Just block), state) = Continue (Just block, state)
+
+updateState state vars = state { output = Nothing
+                               , awaitingInput = Nothing
+                               , variables = vars }
+
+
 runM :: M a -> Store -> ((Either Exception a, Store) -> Partial a) -> Partial a
 runM m s = runCont (runStateT (runExceptT m) s)
 
 runIO :: Program -> IO ()
 runIO (Program _ actMap) = continueIO actMap (Start emptyState)
+
+runFixed :: Program -> [String] -> String
+runFixed (Program _ actMap) = continueFixed actMap (Start emptyState)

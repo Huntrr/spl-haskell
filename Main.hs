@@ -19,3 +19,7 @@ main = do
 runFile :: String -> IO ()
 runFile file = do p <- parseFile file
                   runIO p
+
+runFileWithInput :: String -> [String] -> IO ()
+runFileWithInput file input = do p <- parseFile file
+                                 putStr $ runFixed p input
