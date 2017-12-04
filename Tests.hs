@@ -88,7 +88,9 @@ testParseConstant =
       P.parse constantP "" "a Pig" ~?= Right (Constant (-1)),
       P.parse constantP "" "my amazing Pig" ~?= Right (Constant (-2)),
       P.parse constantP "" "Your amazing amazing Pig" ~?= Right (Constant (-4)),
-      P.parse constantP "" "amazing amazing Pig" ~?= Right (Constant (-4))
+      P.parse constantP "" "amazing amazing Pig" ~?= Right (Constant (-4)),
+      P.parse constantP "" "a beautiful fair warm peaceful sunny toad's summer"
+        ~?= Right (Constant 32)
     ]
 
 testParseExpression :: Test
@@ -116,7 +118,9 @@ testParseExpression =
       P.parse expressionP "" "the difference between the square root of Juliet and thyself"
         ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Var You)),
       P.parse expressionP "" "the difference between the square root of Juliet and twice thyself"
-        ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Twice (Var You)))
+        ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Twice (Var You))),
+      P.parse expressionP "" "the remainder of the quotient between Romeo and twice me"
+        ~?= Right (Mod (Var (They "Romeo")) (Twice (Var Me)))
     ]
 
 testParseComparison :: Test
@@ -163,9 +167,9 @@ testParseSentence =
       parseUnwrap "Am I as good as nothing?" ~?=
         Conditional (Comparison E (Var Me) (Constant 0)),
       parseUnwrap "Let us proceed to act III." ~?=
-        GotoAct "III",
+        GotoAct 3,
       parseUnwrap "If so, let us proceed to scene III." ~?=
-        IfSo (GotoScene "III"),
+        IfSo (GotoScene 3),
       parseUnwrap "Open your heart!" ~?= OutputNumber,
       parseUnwrap "Speak your mind!" ~?= OutputCharacter,
       parseUnwrap "Listen to your heart." ~?= InputNumber,

@@ -12,7 +12,7 @@ import qualified Data.Map.Lazy as Map
 type CName = String
 type Description = String
 type Title = String
-type Label = String
+type Label = Int
 
 data Character = Character CName Description deriving (Eq, Show)
 
@@ -52,7 +52,7 @@ data Expression = Constant Value                   |
                   Cube       Expression            |
                   SquareRoot Expression            |
                   Twice      Expression            |
-                  Mod        Expression            |
+                  Mod        Expression Expression |
                   Var Reference deriving (Eq, Show)
 
 data Relationship = Lt | Le | E | Ne | Gt | Ge deriving (Eq, Show)

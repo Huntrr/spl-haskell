@@ -11,10 +11,12 @@ import           AST
 import           Control.Applicative
 import           Data.Char            (isAlpha, isPunctuation, isSpace)
 import qualified Data.Map.Lazy        as Map
+import qualified Data.Set             as Set
 import           Data.Tuple
 import           Data.Void
 import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
+import           Text.Numeral.Roman
 import qualified WordLists            as W
 
 type Parser = P.Parsec Void String
@@ -32,7 +34,8 @@ parseUntilEndPunc = P.takeWhileP Nothing (not . isEndPunctuation)
 
 -- like parseUntilEndPunc but also parses the end punctuation
 parseUntilEndPunc' :: Parser String
-parseUntilEndPunc' = liftA2 (++) parseUntilEndPunc (P.takeWhileP Nothing isEndPunctuation)
+parseUntilEndPunc' = liftA2 (++)
+                     parseUntilEndPunc (P.takeWhileP Nothing isEndPunctuation)
 
 parseUntilEndBracket :: Parser String
 parseUntilEndBracket = P.takeWhileP Nothing (/= ']')
@@ -79,15 +82,23 @@ characterP = liftA2 Character
 
 actP :: Parser (Label, Act)
 actP = liftA3 (\lab desc mp -> (lab, Act desc mp))
-       (P.string' "Act" *> P.space1 *> tillNoInclC ':' <* P.space1)
+       (P.string' "Act" *> P.space1 *> labelP (tillNoInclC ':') <* P.space1)
        (parseUntilEndPunc' <* P.space)
        (Map.fromList <$> many sceneP)
 
 sceneP :: Parser (Label, Scene)
 sceneP = liftA3 (\lab desc list -> (lab, Scene desc list))
-         (P.string' "Scene" *> P.space1 *> tillNoInclC ':' <* P.space1)
+         (P.string' "Scene" *> P.space1 *> labelP (tillNoInclC ':') <* P.space1)
          (parseUntilEndPunc' <* P.space)
          (concat <$> many (P.try listOfStatementP))
+
+labelP :: Parser String -> Parser Label
+labelP stringP = do
+  s <- stringP
+  case fromRoman s of
+    Just n -> return n
+    Nothing -> P.fancyFailure (Set.singleton (P.ErrorFail
+               (s ++ " is not a valid roman numeral")))
 
 listOfStatementP :: Parser [(Statement, Annotation)]
 listOfStatementP = P.try ((:[]) <$> enterP) <|>
@@ -194,10 +205,11 @@ pushP = Push <$> (P.string' "Remember" *> P.space1 *> referenceP)
 popP :: Parser Sentence
 popP = constP Pop (P.string' "Recall") <* parseUntilEndPunc
 
-genericGoTo :: (String -> Sentence) -> String -> Parser Sentence
+genericGoTo :: (Label -> Sentence) -> String -> Parser Sentence
 genericGoTo con s = con <$> (oneOfString' ["Let us", "We shall", "We must"] *>
                     P.space1 *> oneOfString' ["return to", "proceed to"] *>
-                    P.space1 *> P.string' s *> P.space1 *> parseUntilEndPunc)
+                    P.space1 *> P.string' s *> P.space1 *>
+                    labelP parseUntilEndPunc)
 
 goToSceneP :: Parser Sentence
 goToSceneP = genericGoTo GotoScene "scene"
@@ -248,7 +260,8 @@ comparisonP = P.try equalsP <|>
               greaterThanEqualsP
 
               where
-                genericComparison :: Relationship -> Parser a -> Parser Comparison
+                genericComparison :: Relationship -> Parser a ->
+                                     Parser Comparison
                 genericComparison rel customP =
                   liftA2 (Comparison rel)
                   (oneOfString' W.be *> P.space1 *> expressionP <* customP)
@@ -306,10 +319,14 @@ constantP = P.try (constP (Constant 0) (P.string' "nothing" <* P.space)) <|>
             P.try (genericConstant (2 ^) (W.positiveNouns ++ W.neutralNouns)) <|>
             genericConstant (negate . (2 ^)) W.negativeNouns
             where
-              genericConstant f l = Constant . f . length <$> (P.try (consBeginning *> rest l) <|> rest l)
+              genericConstant f l =
+                Constant . f . length <$>
+                (P.try (consBeginning *> rest l) <|> rest l)
 
               rest l = P.space *> many (oneOfString' W.adjectives <* P.space1)
-                       <* P.space <* oneOfString' l <* P.space
+                       <* P.space <* possesives <* oneOfString' l <* P.space
+
+              possesives = optional (oneOfString' W.possesives) <* P.space
 
               consBeginning =
                 oneOfString' (W.articles ++ W.firstPersonPossessive ++
@@ -317,11 +334,12 @@ constantP = P.try (constP (Constant 0) (P.string' "nothing" <* P.space)) <|>
 
               empty = const "" <$> P.takeP Nothing 0
 
-binOp :: (Expression -> Expression -> Expression) -> String -> String -> Parser Expression
+binOp :: (Expression -> Expression -> Expression) -> String -> String ->
+         Parser Expression
 binOp con word prep =
   liftA2 con
   (P.string' "the" *> P.space1 *> P.string' word *> P.space1 *> P.string' prep
-  *> P.space *> expressionP) (P.string' "and" *> P.space *> expressionP)
+  *> P.space *> expressionP) (P.string' "and" *> P.space1 *> expressionP)
 
 sumP :: Parser Expression
 sumP = binOp Sum "sum" "of"
@@ -355,8 +373,12 @@ twiceP :: Parser Expression
 twiceP = unOp Twice (P.string' "twice")
 
 modP :: Parser Expression
-modP = unOp Mod (P.string' "the" <* P.space1 <* P.string' "remainder" <*
-                P.space1 <* P.string' "of")
+modP = liftA2 Mod
+       (P.string' "the" *> P.space1 *> P.string' "remainder" *> P.space1 *>
+       P.string' "of" *> P.space1 *> P.string' "the" *> P.space1 *>
+       P.string' "quotient" *> P.space1 *> P.string' "between" *> P.space1 *>
+       expressionP)
+       (P.string' "and" *> P.space1 *> expressionP)
 
 varP :: Parser Expression
 varP = Var <$> referenceP <* P.space
