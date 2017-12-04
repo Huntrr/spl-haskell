@@ -30,7 +30,7 @@ data InputType = InChar | InInt deriving (Eq, Show)
 type CName = String
 type Description = String
 type Title = String
-type Label = String
+type Label = Int
 
 data Character = Character CName Description deriving (Eq, Show)
 
