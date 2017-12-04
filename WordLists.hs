@@ -42,5 +42,4 @@ secondPersonPossessive = ["thine", "thy", "your"]
 
 thirdPersonPossessive = ["his", "her", "its", "their"]
 
--- TODO: I had to add "more cunning" to make primes.spl pass. Should more + adjective always work?
-positiveComparators = ["better", "bigger", "fresher", "friendlier", "jollier", "nicer", "more cunning"]
+positiveComparators = ["better", "bigger", "fresher", "friendlier", "jollier", "nicer"]

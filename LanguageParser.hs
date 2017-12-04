@@ -9,7 +9,7 @@ module LanguageParser where
 
 import           AST
 import           Control.Applicative
-import           Data.Char            (isAlpha, isPunctuation, isSpace)
+import           Data.Char            (isAlpha, isPunctuation, isSpace, toLower)
 import qualified Data.Map.Lazy        as Map
 import qualified Data.Set             as Set
 import           Data.Tuple
@@ -20,6 +20,8 @@ import           Text.Numeral.Roman
 import qualified WordLists            as W
 
 type Parser = P.Parsec Void String
+
+-- TODO: How could this file be organized better to be more readable?
 
 -- Utility functions --
 
@@ -48,8 +50,10 @@ oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
 constP :: a -> Parser b -> Parser a
 constP a p = const a <$> (p <* P.space)
 
-oneOfCharacterNames :: Parser String
-oneOfCharacterNames = oneOfString' W.characters P.<?>
+oneOfCharacterNames :: Parser CName
+oneOfCharacterNames = map toLower <$>
+                      oneOfString' W.characters
+                      P.<?>
                       "a valid Shakespeare character"
 
 oneOfSecondPersonPos :: Parser String
@@ -113,7 +117,10 @@ listOfStatementP = P.try ((:[]) <$> enterP) <|>
                    lineP
 
 enterExitAnnotationP :: Parser Annotation
-enterExitAnnotationP = P.try (P.lookAhead (P.char '[' *> parseUntilEndBracket))
+enterExitAnnotationP = do
+  s <- P.try (P.lookAhead (P.char '[' *> parseUntilEndBracket))
+  p <- P.getPosition
+  return (Annotation s p)
 
 enterP :: Parser (Statement, Annotation)
 enterP = swap <$> liftA2 (,) enterExitAnnotationP enterP'
@@ -243,9 +250,14 @@ sentenceP' = P.try ifSoP <|>
              P.<?> "a valid sentence"
 
 sentenceP :: Parser (Sentence, Annotation)
--- TODO: will punctuationChar pass on comma? Is that cool?
-sentenceP = swap <$> liftA2 (,) (P.try (P.lookAhead parseUntilEndPunc))
+sentenceP = swap <$> liftA2 (,) sentAnn
             (sentenceP' <* P.space <* P.punctuationChar <* P.space)
+            where
+              sentAnn :: Parser Annotation
+              sentAnn = do
+                s <- P.try (P.lookAhead parseUntilEndPunc)
+                p <- P.getPosition
+                return (Annotation s p)
 
 negativeComparatorP :: Parser String
 negativeComparatorP =
@@ -396,4 +408,4 @@ referenceP = (P.try youP <|> P.try meP <|> theyP) <* P.space
                                                 W.secondPerson))
                meP = constP Me (oneOfString' (W.firstPersonReflexive ++
                                               W.firstPerson))
-               theyP = They <$> oneOfString' W.characters
+               theyP = They <$> oneOfCharacterNames

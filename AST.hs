@@ -6,8 +6,13 @@
 
 module AST where
 
+<<<<<<< HEAD
 import Data.Map (Map)
 import qualified Data.Map.Lazy as Map
+=======
+import qualified Data.Map.Lazy   as Map
+import           Text.Megaparsec (SourcePos)
+>>>>>>> 77d94b1476cdf429dc8695a7f750cf6eb57c7b1b
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -46,7 +51,7 @@ data Exception = DivideByZero Annotation                     |
                  InvalidAct Label                            |
                  InvalidScene Label deriving (Eq, Show)
 
-type Annotation = String
+data Annotation = Annotation String SourcePos deriving (Eq, Show)
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
@@ -56,8 +61,6 @@ data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 type Block = [(Statement, Annotation)]
 data Scene = Scene Description Block deriving (Eq, Show)
 
--- TODO: for Enter/Exit, it must be a list of 1 or more characters. We can statically
--- enforce that with a slightly different list type.
 data Statement = Enter [CName]  |
                  Exit CName     |
                  Exeunt [CName] |
@@ -65,6 +68,7 @@ data Statement = Enter [CName]  |
                  deriving (Eq, Show)
 
 type Value = Int
+
 data Reference = They CName | You | Me deriving (Eq, Show)
 
 data Expression = Constant Value                   |
