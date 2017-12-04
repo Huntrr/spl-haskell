@@ -10,6 +10,7 @@ import Test.QuickCheck (generate,elements,vectorOf)
 import Control.Monad (liftM2,liftM3,foldM)
 import WordLists as W
 import Text.Numeral.Roman
+import Text.Megaparsec (SourcePos)
 
 import AST
 
