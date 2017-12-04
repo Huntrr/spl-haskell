@@ -9,7 +9,7 @@ module LanguageParser where
 
 import           AST
 import           Control.Applicative
-import           Data.Char            (isAlpha, isPunctuation, isSpace)
+import           Data.Char            (isAlpha, isPunctuation, isSpace, toLower)
 import qualified Data.Map.Lazy        as Map
 import qualified Data.Set             as Set
 import           Data.Tuple
@@ -50,8 +50,10 @@ oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
 constP :: a -> Parser b -> Parser a
 constP a p = const a <$> (p <* P.space)
 
-oneOfCharacterNames :: Parser String
-oneOfCharacterNames = oneOfString' W.characters P.<?>
+oneOfCharacterNames :: Parser CName
+oneOfCharacterNames = map toLower <$>
+                      oneOfString' W.characters
+                      P.<?>
                       "a valid Shakespeare character"
 
 oneOfSecondPersonPos :: Parser String
@@ -400,4 +402,4 @@ referenceP = (P.try youP <|> P.try meP <|> theyP) <* P.space
                                                 W.secondPerson))
                meP = constP Me (oneOfString' (W.firstPersonReflexive ++
                                               W.firstPerson))
-               theyP = They <$> oneOfString' W.characters
+               theyP = They <$> oneOfCharacterNames

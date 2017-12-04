@@ -59,10 +59,10 @@ samplePrograms = [ ("hello", [], "Hello World!")
 helloWorldHeader = Header
                    "The Infamous Hello World Program."
                    [
-                      Character "Romeo" "a young man with a remarkable patience.",
-                      Character "Juliet" "a likewise young woman of remarkable grace.",
-                      Character "Ophelia" "a remarkable woman much in dispute with Hamlet.",
-                      Character "Hamlet" "the flatterer of Andersen Insulting A/S."
+                      Character "romeo" "a young man with a remarkable patience.",
+                      Character "juliet" "a likewise young woman of remarkable grace.",
+                      Character "ophelia" "a remarkable woman much in dispute with Hamlet.",
+                      Character "hamlet" "the flatterer of Andersen Insulting A/S."
                     ]
 
 headerString = "The Infamous Hello World Program.\n   \
@@ -106,21 +106,21 @@ testParseExpression =
         ~?= Right (Constant (-64)),
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant (-4)))) (Cube (Constant (-4)))),
-      P.parse expressionP "" "Juliet" ~?= Right (Var (They "Juliet")),
+      P.parse expressionP "" "Juliet" ~?= Right (Var (They "juliet")),
       -- TODO: multi-word variables don't work yet
-      P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the Ghost"))),
+      P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the ghost"))),
       P.parse expressionP "" "the product of Juliet and a Pig"
-        ~?= Right (Product (Var (They "Juliet")) (Constant (-1))),
+        ~?= Right (Product (Var (They "juliet")) (Constant (-1))),
       P.parse expressionP "" "the difference between Juliet and thyself"
-        ~?= Right (Difference (Var (They "Juliet")) (Var You)),
+        ~?= Right (Difference (Var (They "juliet")) (Var You)),
       P.parse expressionP "" "the difference between the square of Juliet and thyself"
-        ~?= Right (Difference (Square (Var (They "Juliet"))) (Var You)),
+        ~?= Right (Difference (Square (Var (They "juliet"))) (Var You)),
       P.parse expressionP "" "the difference between the square root of Juliet and thyself"
-        ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Var You)),
+        ~?= Right (Difference (SquareRoot (Var (They "juliet"))) (Var You)),
       P.parse expressionP "" "the difference between the square root of Juliet and twice thyself"
-        ~?= Right (Difference (SquareRoot (Var (They "Juliet"))) (Twice (Var You))),
+        ~?= Right (Difference (SquareRoot (Var (They "juliet"))) (Twice (Var You))),
       P.parse expressionP "" "the remainder of the quotient between Romeo and twice me"
-        ~?= Right (Mod (Var (They "Romeo")) (Twice (Var Me)))
+        ~?= Right (Mod (Var (They "romeo")) (Twice (Var Me)))
     ]
 
 testParseComparison :: Test
@@ -151,8 +151,8 @@ testParseComparison =
         ~?= Right (Comparison Le (Var Me) (Var You)),
       P.parse comparisonP "" "Is a disgusting leech not better than thee?"
         ~?= Right (Comparison Le (Constant (-2)) (Var You)),
-      P.parse comparisonP "" "Art thou more cunning than the Ghost?"
-        ~?= Right (Comparison Gt (Var You) (Var (They "the Ghost")))
+      P.parse comparisonP "" "Art thou more cunning than the ghost?"
+        ~?= Right (Comparison Gt (Var You) (Var (They "the ghost")))
     ]
 
 parseUnwrap :: String -> Sentence
@@ -177,13 +177,13 @@ testParseSentence =
       parseUnwrap "You lying stupid fatherless big smelly half-witted coward!"
         ~?= Declaration (Constant (-64)),
       parseUnwrap "You are as stupid as the difference between Juliet and thyself."
-        ~?= Declaration (Difference (Var (They "Juliet")) (Var You)),
+        ~?= Declaration (Difference (Var (They "juliet")) (Var You)),
       parseUnwrap "You are my little pony!"
         ~?= Declaration (Constant 2),
       parseUnwrap "You are nothing!"
         ~?= Declaration (Constant 0),
       parseUnwrap "Remember me!" ~?= Push Me,
-      parseUnwrap "Remember Hamlet!" ~?= Push (They "Hamlet"),
+      parseUnwrap "Remember Hamlet!" ~?= Push (They "hamlet"),
       parseUnwrap "Recall your unhappy childhood!" ~?= Pop
     ]
 
