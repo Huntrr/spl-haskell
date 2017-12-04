@@ -6,13 +6,9 @@
 
 module AST where
 
-<<<<<<< HEAD
 import Data.Map (Map)
 import qualified Data.Map.Lazy as Map
-=======
-import qualified Data.Map.Lazy   as Map
-import           Text.Megaparsec (SourcePos)
->>>>>>> 77d94b1476cdf429dc8695a7f750cf6eb57c7b1b
+import Text.Megaparsec (SourcePos)
 
 import Data.Set (Set)
 import qualified Data.Set as Set
