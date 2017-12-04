@@ -39,7 +39,7 @@ data Character = Character CName Description deriving (Eq, Show)
 data Exception = DivideByZero Annotation                     |
                  UnrealAnswer Annotation                     |
                  EmptyStack Annotation Store                 |
-                 AmbiguousYou Annotation Store               |
+                 AmbiguousYou Annotation (Set CName)         |
                  NotOnStage CName Annotation (Set CName)     |
                  AlreadyOnStage CName Annotation (Set CName) |
                  UndefinedCondition Annotation Store         |

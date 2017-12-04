@@ -115,10 +115,11 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
                               name (value, []) (variables state) }
   eval (Push r)         = do
     n     <- evalRef a cname r
+    name <- getOther a cname
     value <- getValue a n
     state <- get
     let map = variables state
-     in put $ state { variables = Map.insertWith (\(x, []) (v, xs) -> (v, x:xs)) n (value, []) map}
+     in put $ state { variables = Map.insertWith (\(x, []) (v, xs) -> (v, x:xs)) name (value, []) map}
   eval Pop              = do
     state <- get
     name  <- getOther a cname
@@ -139,6 +140,7 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
     cname <- getOther a cname
     value <- getValue a cname
     put $ state { output = Just $ chr value : "" }
+    -- put $ state { output = Just $ show value ++ " " ++ chr value : "\n" }
     handleIO ()
     return ()
 
@@ -164,7 +166,7 @@ getOther a me = do
   let set = (onStage state) Set.\\ (Set.singleton me)
   case Set.toList set of
     [single] -> return single
-    _        -> throwError $ AmbiguousYou a state
+    _        -> throwError $ AmbiguousYou a set
 
 getValue :: (MonadState Store m, MonadError Exception m) =>
   Annotation -> String -> m Value
@@ -186,9 +188,13 @@ evalStatement handleIO gotoAct gotoScene (s, a) = eval s where
   eval :: Statement -> m ()
   eval (Enter cnames)        = forM_ cnames enterChar
   eval (Exit cname)          = exitChar cname
+  eval (Exeunt [])           = putCharSet Set.empty
   eval (Exeunt cnames)       = forM_ cnames exitChar
-  eval (Line cname sentence) = evalSentence handleIO gotoAct gotoScene a cname
-                                sentence
+  eval (Line cname sentence) = do
+    state <- get
+    let stage = onStage state in if Set.member cname stage
+       then evalSentence handleIO gotoAct gotoScene a cname sentence
+       else throwError $ NotOnStage cname a stage
 
   getCharSet = do
     state <- get
