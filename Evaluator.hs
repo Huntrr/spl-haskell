@@ -324,7 +324,7 @@ continueIO actMap = go where
     putStrLn $ "Exception: " ++ (show e)
     return ()
   go Complete = do
-    putStrLn $ "\nExecution complete"
+    putStrLn $ "\n"
     return ()
   go (Start state) = go $ Continue (Nothing, state)
   go (Continue (block, state)) = do
