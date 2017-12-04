@@ -20,6 +20,10 @@ runFile :: String -> IO ()
 runFile file = do p <- parseFile file
                   runIO p
 
-runFileWithInput :: String -> [String] -> IO ()
-runFileWithInput file input = do p <- parseFile file
-                                 putStr $ runFixed p input
+runFileInts :: String -> [Int] -> IO ()
+runFileInts file input = do p <- parseFile file
+                            putStr $ runInt p input
+
+runFileString :: String -> String -> IO ()
+runFileString file input = do p <- parseFile file
+                              putStr $ runString p input

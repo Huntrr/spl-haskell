@@ -2,7 +2,7 @@
     FlexibleInstances, ScopedTypeVariables #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
-module Evaluator where
+module Evaluator (runIO, runInt, runString, runList) where
 
 import Debug.Trace (trace)
 
@@ -291,9 +291,9 @@ nextLabel "VIII" = "IX"
 nextLabel "IX" = "X"
 nextLabel _ = undefined
 
-continueFixed :: Map Label Act -> Partial (Maybe Block) -> [String] -> String
+continueFixed :: Map Label Act -> Partial (Maybe Block) -> [Int] -> String
 continueFixed actMap = go [] where
-  go :: String -> Partial (Maybe Block) -> [String] -> [Char]
+  go :: String -> Partial (Maybe Block) -> [Int] -> [Char]
   go _ (Fail e) _   = "Exception: " ++ (show e)
   go res Complete _ = res ++ "\n"
   go res (Start state) input = go res (Continue (Nothing, state)) input
@@ -303,20 +303,15 @@ continueFixed actMap = go [] where
     input'
 
     where
-      out         = case output state of
-                      Nothing -> ""
-                      Just s  -> s
+      out            = case output state of
+                         Nothing -> ""
+                         Just s  -> s
       (input', vars) = case awaitingInput state of
                          Nothing         -> (input, variables state)
                          Just (cname, t) ->
                            case input of
                              i:nput ->
-                               let val = case t of
-                                           InInt -> (read i :: Int)
-                                           InChar -> case i of
-                                                       c:_ -> if c == '\n' then -1 else ord c
-                                                       _   -> error "Invalid input"
-                                in (nput, Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) (variables state))
+                               (nput, Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (i, []) (variables state))
                              _ -> error "Not enough inputs"
 
       next = runM (callCC $ executeAct actMap block)
@@ -368,5 +363,27 @@ runM m s = runCont (runStateT (runExceptT m) s)
 runIO :: Program -> IO ()
 runIO (Program _ actMap) = continueIO actMap (Start emptyState)
 
-runFixed :: Program -> [String] -> String
+runFixed :: Program -> [Int] -> String
 runFixed (Program _ actMap) = continueFixed actMap (Start emptyState)
+
+runInt :: Program -> [Int] -> String
+runInt = runFixed
+
+runString :: Program -> String -> String
+runString program input = let input' = stringInput input
+             in runFixed program input'
+
+runList :: Program -> [Either Int Char] -> String
+runList program input = let input' = listInput input
+                         in runFixed program input'
+
+-- | testing utils
+listInput :: [Either Int Char] -> [Int]
+listInput = map f where
+  f (Left i)  = i
+  f (Right c) = if c == '\n' then -1 else ord c
+
+stringInput :: String -> [Int]
+stringInput = map f where
+  f '\n' = -1
+  f c    = ord c
