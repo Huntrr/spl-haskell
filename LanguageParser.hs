@@ -240,8 +240,7 @@ sentenceP' = P.try ifSoP <|>
              P.<?> "a valid sentence"
 
 sentenceP :: Parser (Sentence, Annotation)
--- TODO: will punctuationChar pass on comma? Is that cool?
-sentenceP = swap <$> liftA2 (,) (sentAnn)
+sentenceP = swap <$> liftA2 (,) sentAnn
             (sentenceP' <* P.space <* P.punctuationChar <* P.space)
             where
               sentAnn :: Parser Annotation

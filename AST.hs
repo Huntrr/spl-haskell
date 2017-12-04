@@ -19,7 +19,6 @@ data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
--- TODO: change to include line number/character position/other data
 data Annotation = Annotation String SourcePos deriving (Eq, Show)
 data Exception = DivideByZero |
                  EmptyStack deriving (Eq, Show)
@@ -31,8 +30,6 @@ data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
 data Scene = Scene Description [(Statement, Annotation)] deriving (Eq, Show)
 
--- TODO: for Enter/Exit, it must be a list of 1 or more characters. We can statically
--- enforce that with a slightly different list type.
 data Statement = Enter [CName]  |
                  Exit CName     |
                  Exeunt [CName] |
@@ -40,8 +37,7 @@ data Statement = Enter [CName]  |
                  deriving (Eq, Show)
 
 type Value = Int
--- TODO: I am using Reference instead of CName because variables can be, and often
--- are second person pronouns. They can also just be regular character names.
+
 data Reference = They CName | You | Me deriving (Eq, Show)
 
 data Expression = Constant Value                   |
