@@ -64,7 +64,7 @@ evalExpression a speaker = eval where
     return $ f v
 
 evalRef :: (MonadState Store m, MonadError Exception m) =>
-  CName -> Annotation -> Reference -> m String
+  Annotation -> CName -> Reference -> m String
 evalRef a speaker = f where
   f Me  = return speaker
   f You = getOther a speaker
