@@ -240,7 +240,7 @@ executeScene :: (MonadState Store m, MonadCont m, MonadError Exception m) =>
 executeScene map b handleIO nextAct gotoAct = do
   state <- get
   let s = scene state
-      next = nextLabel s
+      next = succ s
       mNext = if Map.notMember next map then Nothing else Just next in
     case Map.lookup s map of
       Nothing -> throwError (InvalidScene s)
@@ -264,7 +264,7 @@ executeAct :: (MonadState Store m, MonadCont m, MonadError Exception m) =>
 executeAct map b handleIO = do
   state <- get
   let a = act state
-      next = nextLabel a
+      next = succ a
       mNext = if Map.notMember next map then Nothing else Just next in
     case Map.lookup a map of
       Nothing -> throwError (InvalidAct a)
@@ -274,22 +274,10 @@ executeAct map b handleIO = do
           Nothing -> return Nothing
           Just a  -> do
             state' <- get
-            put $ state' { act = a, scene = firstScene, onStage = Set.empty }
+            put $ state' { act = a, scene = firstScene }
             executeAct map Nothing handleIO
 
-firstScene = "I"
-
-nextLabel :: Label -> Label
-nextLabel "I" = "II"
-nextLabel "II" = "III"
-nextLabel "III" = "IV"
-nextLabel "IV" = "V"
-nextLabel "V" = "VI"
-nextLabel "VI" = "VII"
-nextLabel "VII" = "VIII"
-nextLabel "VIII" = "IX"
-nextLabel "IX" = "X"
-nextLabel _ = undefined
+firstScene = 1
 
 continueFixed :: Map Label Act -> Partial (Maybe Block) -> [Int] -> String
 continueFixed actMap = go [] where

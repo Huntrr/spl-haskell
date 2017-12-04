@@ -22,7 +22,7 @@ data Store = Store { variables     :: Map CName (Value, [Value])
                    , scene         :: Label
                    } deriving (Eq, Show)
 
-emptyState = Store Map.empty Set.empty Nothing Nothing Nothing "I" "I"
+emptyState = Store Map.empty Set.empty Nothing Nothing Nothing 1 1
 
 data InputType = InChar | InInt deriving (Eq, Show)
 
