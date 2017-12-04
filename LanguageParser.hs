@@ -107,7 +107,10 @@ listOfStatementP = P.try ((:[]) <$> enterP) <|>
                    lineP
 
 enterExitAnnotationP :: Parser Annotation
-enterExitAnnotationP = P.try (P.lookAhead (P.char '[' *> parseUntilEndBracket))
+enterExitAnnotationP = do
+  s <- P.try (P.lookAhead (P.char '[' *> parseUntilEndBracket))
+  p <- P.getPosition
+  return (Annotation s p)
 
 enterP :: Parser (Statement, Annotation)
 enterP = swap <$> liftA2 (,) enterExitAnnotationP enterP'
@@ -238,8 +241,14 @@ sentenceP' = P.try ifSoP <|>
 
 sentenceP :: Parser (Sentence, Annotation)
 -- TODO: will punctuationChar pass on comma? Is that cool?
-sentenceP = swap <$> liftA2 (,) (P.try (P.lookAhead parseUntilEndPunc))
+sentenceP = swap <$> liftA2 (,) (sentAnn)
             (sentenceP' <* P.space <* P.punctuationChar <* P.space)
+            where
+              sentAnn :: Parser Annotation
+              sentAnn = do
+                s <- P.try (P.lookAhead parseUntilEndPunc)
+                p <- P.getPosition
+                return (Annotation s p)
 
 negativeComparatorP :: Parser String
 negativeComparatorP =

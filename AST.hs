@@ -6,7 +6,8 @@
 
 module AST where
 
-import qualified Data.Map.Lazy as Map
+import qualified Data.Map.Lazy   as Map
+import           Text.Megaparsec (SourcePos)
 
 -- Character name
 type CName = String
@@ -19,7 +20,7 @@ data Character = Character CName Description deriving (Eq, Show)
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
 -- TODO: change to include line number/character position/other data
-type Annotation = String
+data Annotation = Annotation String SourcePos deriving (Eq, Show)
 data Exception = DivideByZero |
                  EmptyStack deriving (Eq, Show)
 
