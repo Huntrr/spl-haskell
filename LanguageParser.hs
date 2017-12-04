@@ -21,6 +21,8 @@ import qualified WordLists            as W
 
 type Parser = P.Parsec Void String
 
+-- TODO: How could this file be organized better to be more readable?
+
 -- Utility functions --
 
 tillNoInclC :: Char -> Parser String
