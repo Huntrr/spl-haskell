@@ -10,12 +10,25 @@ import Test.QuickCheck (generate,elements,vectorOf)
 import Control.Monad (liftM2,liftM3,foldM)
 import WordLists as W
 import Text.Numeral.Roman
-import Text.Megaparsec (SourcePos)
+import qualified Data.Char as Char
+import Data.Map as Map
+import qualified Data.List as List
+
+{-- NOTE: in order to PrettyPrint an AST printed by the command
+`testParse $ "samples/__.spl"` we must:
+- replace all occurences of `Pos` with the constructor `mkPos`
+- should maybe get rid of newlines in annotations in the
+parser's output
+- convert the integer labels to `1 :: Label`
+- remove all mentions of `fromList` --}
 
 import AST
+import LanguageParser
 
 class PP a where
   pp :: a -> IO Doc
+
+{-- Utilities --}
 
 newline :: Doc
 newline = PP.char '\n'
@@ -24,12 +37,40 @@ dot :: Doc
 dot = PP.char '.'
 
 catSep :: [Doc] -> Doc -> Doc
-catSep l sep = foldr (\x y -> x PP.<+> sep PP.<+> y) PP.empty l
+catSep l sep = List.foldr (\x y -> x PP.<+> sep PP.<+> y) PP.empty l
 
-{-- render :: PP a => a -> String
-render = PP.render . pp --}
+capName :: String -> String
+capName [] = []
+capName (h:t) = Char.toUpper h : t
+
+titleIndent :: Doc
+titleIndent = PP.text $ replicate 20 ' '
+
+printScene :: String -> Int -> Doc
+printScene desc n = titleIndent PP.<> PP.text "Scene" PP.<+> printLabel n
+                    PP.<> PP.colon PP.<+> PP.text desc PP.<> newline
+
+printAct :: String -> Int -> Doc
+printAct desc n = titleIndent PP.<> PP.text "Act" PP.<+> printLabel n
+                    PP.<> PP.colon PP.<+> PP.text desc PP.<> newline
+
+printLabel :: Int -> Doc
+printLabel n = toRoman n
+
+printHeader :: Header -> Doc
+printHeader (Header title clist) = PP.text title PP.<> newline PP.$$ 
+  PP.vcat (printChar <$> clist) PP.<> newline PP.<> newline
+
+printChar :: Character -> Doc
+printChar (Character name desc) = PP.text (capName name) PP.<> 
+  PP.comma PP.<+> PP.text desc
 
 {-- Randomized parts of speech --}
+
+commandWithCharList :: String -> [CName] -> Doc
+commandWithCharList s l = PP.lbrack PP.<> PP.text s PP.<+> chars PP.<> 
+                            PP.rbrack PP.<> newline where
+  chars = PP.hcat $ PP.punctuate (PP.text " and ") (PP.text . capName <$> l)
 
 exclamOrPeriod :: IO Doc
 exclamOrPeriod = do
@@ -60,56 +101,45 @@ generateConstant n = do
                         generate $ elements W.negativeNouns
   return $ PP.hsep (PP.text <$> adjs) PP.<+> PP.text noun
 
+{-- Pretty Printing functions --}
 
-{-- 
-NOTE: I don't think we need the functions below
-To pretty print, just call pp $ ____
-
-splPretty :: Program -> IO Doc
-splPretty = undefined
-
-splChar :: String -> IO Doc
-splChar = pp
-
-docToString :: IO Doc -> IO String
-docToString d = do
-  doc <- d
-  return $ PP.render doc
-
-printString :: IO String -> IO ()
-printString s = do
-  str <- s
-  print str --}
-
-instance PP Program where
-  pp _ = undefined
+splPretty :: String -> IO ()
+splPretty fileName = do
+  program <- parseFile fileName
+  doc <- pp program
+  putStr $ PP.render doc
 
 instance PP Character where
   pp (Character name desc) = liftM3 (\x y z -> x PP.<> y PP.<+> z) 
-                                (pp name) (return PP.comma) (pp desc)
+                                (pp $ capName name) (return PP.comma) (pp desc)
 
 instance PP String where
   pp s = return $ PP.text s
 
 instance PP Header where
-  pp (Header t l) = liftM3 (\x y z -> x PP.<> y PP.$$ z)
+  pp (Header t l) = liftM3 (\x y z -> x PP.<> y PP.$$ z PP.<> newline PP.<> newline)
                       (pp t) 
                       (return newline) 
                       (foldM (\d c -> liftM2 (PP.$$) (return d) (pp c)) 
                         PP.empty l)
 
-commandWithCharList :: String -> [CName] -> IO Doc
-commandWithCharList s l = (\x -> PP.lbrack PP.<> PP.text s PP.<+> x PP.<> PP.rbrack) <$> chars where
-  chars = foldM (\d c -> liftM2 (\x y -> x PP.<+> PP.text "and" PP.<+> y) 
-                                (return d) (pp c)) PP.empty l
-
 instance PP Statement where
-  pp (Enter l) = commandWithCharList "Enter" l
-  pp (Exeunt l) = commandWithCharList "Exeunt" l
-  pp (Exit name) = (\x -> PP.lbrack PP.<> PP.text "Exit" PP.<+> x PP.<> PP.rbrack) <$>
-                   pp name
-  pp (Line name sentence) = liftM3 (\x y z -> x PP.<> PP.colon PP.$$ PP.space PP.<> y PP.<> z) 
-                                   (pp name) (pp sentence) exclamOrPeriod
+  pp (Enter l) = return $ commandWithCharList "Enter" l
+  pp (Exeunt l) = return $ commandWithCharList "Exeunt" l
+  pp (Exit name) = (\x -> PP.lbrack PP.<> PP.text "Exit" PP.<+> x PP.<> PP.rbrack PP.<> newline) <$>
+                   pp (capName name)
+  pp (Line name sentence) = liftM3 (\x y z -> x PP.<> PP.colon PP.$$ PP.space PP.<> y PP.<> z PP.<> newline) 
+                                   (pp $ capName name) (pp sentence) exclamOrPeriod
+
+instance PP (Statement, Annotation) where
+  pp (s, _) = pp s
+{--  pp (s, Annotation "" _) = pp s
+  pp (Enter _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
+  pp (Exeunt _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
+  pp (Exit _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
+  pp (Line name _, Annotation a _) = liftM2 (\n p -> n PP.<> PP.colon PP.$$ PP.space PP.<> 
+                                                PP.text a PP.<> p PP.<> newline)
+                                      (return $ PP.text $ capName name) exclamOrPeriod --}
 
 instance PP Sentence where
   pp (IfSo s) = (\ x -> PP.text "If so," PP.<+> x) <$> pp s
@@ -136,7 +166,7 @@ instance PP Reference where
   pp Me = do
             me <- generate $ elements (W.firstPerson ++ W.firstPersonReflexive)
             return $ PP.text me
-  pp (They name) = pp name
+  pp (They name) = pp $ capName name
 
 instance PP Expression where
   pp (Constant 0) = return $ PP.text "nothing"
@@ -169,8 +199,20 @@ instance PP Relationship where
   pp l = undefined
 
 instance PP Block where
-  pp l = foldM (\d (s, Annotation a _) -> liftM2 (PP.$$) 
-                                   (return d) 
-                                   (if null a then pp s else return (PP.text a)))
+  pp l = foldM (\d (s, a) -> liftM2 (PP.$$) (return d) (pp (s, a)))
                 PP.empty (l :: [(Statement, Annotation)])
+
+
+instance PP (Label, Scene) where
+  pp (label, Scene desc block) = (\blck -> printScene desc label PP.$$ blck) <$> (pp block)
+
+instance PP (Label, Act) where
+  pp (label, Act desc sceneMap) = let keys = List.sort (Map.keys sceneMap) 
+                                      sceneMonads = [ pp (k, Map.findWithDefault (Scene "" []) k sceneMap) | k <- keys ] in
+    (foldM (\doc sceneMonad -> liftM2 (PP.$$) (return doc) sceneMonad) (printAct desc label) sceneMonads)
+
+instance PP Program where
+  pp (Program h actMap) = let keys = List.sort (Map.keys actMap)
+                              actMonads = [ pp (k, Map.findWithDefault (Act "" Map.empty) k actMap) | k <- keys ] in
+    (foldM (\doc actMonad -> liftM2 (PP.$$) (return doc) actMonad) (printHeader h) actMonads)
 
