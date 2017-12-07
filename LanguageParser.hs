@@ -45,7 +45,11 @@ parseUntilEndBracket = P.takeWhileP Nothing (/= ']')
 -- parse one of the given strings, case-insensitively
 oneOfString' :: [String] -> Parser String
 oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
-                 P.notFollowedBy P.letterChar)) <$> l)
+                 P.notFollowedBy invalid)) <$> l)
+                 where
+                   -- a word can only be followed by either a space or end punctuation
+                   invalid :: Parser Char
+                   invalid = P.satisfy (\x -> isAlpha x || x == '-')
 
 constP :: a -> Parser b -> Parser a
 constP a p = const a <$> (p <* P.space)
