@@ -24,6 +24,7 @@ parser's output
 
 import AST
 import LanguageParser
+import Evaluator
 
 class PP a where
   pp :: a -> IO Doc
@@ -124,7 +125,7 @@ generateConstant n = do
   return $ PP.text (if not (List.null adjs) &&
                        not (List.null $ head adjs) &&
                        isVowel (head $ head adjs) 
-                        then "an" else "a") PP.<+> 
+                        then "an" else "a") PP.<+> -- TODO: consider case with only noun
     PP.hsep (PP.text <$> adjs) PP.<+> PP.text noun
 
 {-- TODO: generate arbitrary constants that aren't powers of 2 --}
