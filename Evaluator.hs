@@ -4,8 +4,6 @@
 
 module Evaluator (runIO, runInt, runString, runList) where
 
-import Debug.Trace (trace)
-
 import Data.Char (ord, chr)
 
 import Data.Map (Map)
@@ -226,8 +224,6 @@ executeBlock b handleIO gotoAct nextScene gotoScene = go b where
   go (s:rest) = do
     evalStatement (\() -> handleIO (Just rest))
       (gotoAct . Just) (gotoScene . Just) s
-    -- state <- get
-    -- trace (show s ++ "\n\t" ++ show state ++ "\n\n\n") (go rest)
     go rest
 
 executeScene :: (MonadState Store m, MonadCont m, MonadError Exception m) =>
