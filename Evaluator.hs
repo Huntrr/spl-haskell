@@ -279,42 +279,48 @@ executeAct map b handleIO = do
 
 firstScene = 1
 
-continueFixed :: Map Label Act -> Partial (Maybe Block) -> [Int] -> Either String Exception
-continueFixed actMap = go [] where
-  go :: String -> Partial (Maybe Block) -> [Int] -> Either String Exception
-  go _ (Fail e) _   = Right e
-  go res Complete _ = Left $ res ++ "\n"
-  go res (Start state) input = go res (Continue (Nothing, state)) input
-  go res (Continue (block, state)) input = go
-    (res ++ out)
-    next
-    input'
+class Monad m => ProgIO m where
+  inInt  :: m Int
+  inChar :: m Int
+  outStr :: String -> m ()
 
-    where
-      out            = case output state of
-                         Nothing -> ""
-                         Just s  -> s
-      (input', vars) = case awaitingInput state of
-                         Nothing         -> (input, variables state)
-                         Just (cname, t) ->
-                           case input of
-                             i:nput ->
-                               (nput, Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (i, []) (variables state))
-                             _ -> error "Not enough inputs"
+instance ProgIO IO where
+  inInt = do
+    i <- getLine
+    return $ read i
 
-      next = runM (callCC $ executeAct actMap block)
-             (updateState state vars) cont
+  inChar = do
+    c <- getChar
+    return $ case c of
+               '\n' -> -1
+               _    -> ord c
 
-continueIO :: Map Label Act -> Partial (Maybe Block) -> IO ()
-continueIO actMap = go where
-  go :: Partial (Maybe Block) -> IO ()
-  go (Fail e) = do
-    putStrLn $ exceptionPretty e
-    return ()
-  go Complete = do
-    putStr $ "\n"
-    return ()
-  go (Start state) = go $ Continue (Nothing, state)
+  outStr = putStr
+
+data FixedIO = FixedIO [Int] String
+instance ProgIO (State FixedIO) where
+  inInt = do
+    FixedIO i o <- get
+    case i of
+      []   -> error "Not enough inputs"
+      x:xs -> do
+        put (FixedIO xs o)
+        return x
+
+  inChar = inInt
+
+  outStr s = do
+    FixedIO i o <- get
+    put (FixedIO i (o ++ s))
+
+
+continue :: forall m. ProgIO m =>
+  Map Label Act -> Partial (Maybe Block) -> m (Maybe Exception)
+continue actMap = go where
+  go :: Partial (Maybe Block) -> m (Maybe Exception)
+  go (Fail e)      = return $ Just e
+  go Complete      = return $ Nothing
+  go (Start state) = go (Continue (Nothing, state))
   go (Continue (block, state)) = do
     putOutput (output state)
     variables' <- readInput (awaitingInput state) (variables state)
@@ -322,17 +328,13 @@ continueIO actMap = go where
          (updateState state variables') cont
     
   putOutput Nothing  = return ()
-  putOutput (Just c) = putStr c
+  putOutput (Just c) = outStr c
   readInput Nothing m = return m
-  readInput (Just (cname, InChar)) m = do
-    c <- getChar
-    let val = case c of
-              '\n' -> -1
-              _    -> ord c in
-      return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) m
-  readInput (Just (cname, InInt))  m = do
-    i <- getLine
-    return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (read i, []) m
+  readInput (Just (cname, t))  m = do
+    val <- case t of
+             InChar -> inChar
+             InInt  -> inInt
+    return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) m
 
 
 cont :: (Either Exception (Maybe Block), Store) -> Partial (Maybe Block)
@@ -349,10 +351,15 @@ runM :: M a -> Store -> ((Either Exception a, Store) -> Partial a) -> Partial a
 runM m s = runCont (runStateT (runExceptT m) s)
 
 runIO :: Program -> IO ()
-runIO (Program _ actMap) = continueIO actMap (Start emptyState)
+runIO (Program _ actMap) = continue actMap (Start emptyState) >> return ()
 
 runFixed :: Program -> [Int] -> Either String Exception
-runFixed (Program _ actMap) = continueFixed actMap (Start emptyState)
+runFixed (Program _ actMap) i = let (res, FixedIO _ o) = runState
+                                      (continue actMap (Start emptyState))
+                                      (FixedIO i "")
+                                 in case res of
+                                      Just e -> Right e
+                                      Nothing -> Left o
 
 runInt :: Program -> [Int] -> Either String Exception
 runInt = runFixed
