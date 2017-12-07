@@ -65,23 +65,47 @@ printChar :: Character -> Doc
 printChar (Character name desc) = PP.text (capName name) PP.<> 
   PP.comma PP.<+> PP.text desc
 
-{-- Randomized parts of speech --}
-
 commandWithCharList :: String -> [CName] -> Doc
 commandWithCharList s l = PP.lbrack PP.<> PP.text s PP.<+> chars PP.<> 
                             PP.rbrack PP.<> newline where
   chars = PP.hcat $ PP.punctuate (PP.text " and ") (PP.text . capName <$> l)
 
-exclamOrPeriod :: IO Doc
-exclamOrPeriod = do
-  c <- generate $ elements ['!', '.']
-  return $ PP.char c
+isVowel :: Char -> Bool
+isVowel x = x `elem` "aeiou"
+
+-- remove the article from a constant if needed
+-- e.g. if you is "You", must be "You big fat pony"
+fixConstant :: Doc -> Doc -> Doc
+fixConstant you ex = let youStr = PP.render you
+                         exStr = PP.render ex in
+  if (length . words) youStr == 1 then
+    you PP.<> PP.text (snd $ break (==' ') exStr)
+  else
+    you PP.<+> ex
+
+{-- Randomized parts of speech --}
+
+punctuation :: Sentence -> IO Doc
+punctuation sentence = case sentence of
+  (Conditional _) -> return $ PP.char '?'
+  (_) -> do
+    c <- generate $ elements ['!', '.']
+    return $ PP.char c
+
+areYou :: IO Doc
+areYou = do
+  ru <- generate $ elements ["Are you", "Art thou"]
+  return $ PP.text ru
 
 secondPersonDeclare :: IO Doc
 secondPersonDeclare = do
-  adj <- generate $ elements (W.negativeAdjectives ++ 
-                              W.neutralAdjectives ++ 
-                              W.positiveAdjectives)
+  adj <- generate $ elements W.adjectives
+  declr <- generate $ elements ["You are", "You are as " ++ adj ++ " as"]
+  return $ PP.text declr
+
+secondPersonNonZeroConst :: IO Doc
+secondPersonNonZeroConst = do
+  adj <- generate $ elements W.adjectives
   declr <- generate $ elements ["You", "You are", "You are as " ++ adj ++ " as"]
   return $ PP.text declr
 
@@ -94,12 +118,35 @@ goTo = do
 generateConstant :: Int -> IO Doc
 generateConstant n = do
   adjs <- generate $ vectorOf (floor $ logBase 2 (abs (fromIntegral n)) :: Int) 
-                              (elements (W.negativeAdjectives ++ 
-                                         W.neutralAdjectives ++
-                                        W.positiveAdjectives))
+                              (elements W.adjectives)
   noun <- if n > 0 then generate $ elements W.positiveNouns else
                         generate $ elements W.negativeNouns
-  return $ PP.hsep (PP.text <$> adjs) PP.<+> PP.text noun
+  return $ PP.text (if not (List.null adjs) &&
+                       not (List.null $ head adjs) &&
+                       isVowel (head $ head adjs) 
+                        then "an" else "a") PP.<+> 
+    PP.hsep (PP.text <$> adjs) PP.<+> PP.text noun
+
+{-- TODO: generate arbitrary constants that aren't powers of 2 --}
+
+negativeCompare :: IO Doc
+negativeCompare = do
+  negComp <- generate $ elements W.negativeComparators
+  adj <- generate $ elements W.adjectives
+  result <- generate $ elements [negComp, "less " ++ adj]
+  return $ PP.text (result ++ " than")
+
+positiveCompare :: IO Doc
+positiveCompare = do
+  posComp <- generate $ elements W.positiveComparators
+  adj <- generate $ elements W.adjectives
+  result <- generate $ elements [posComp, "more " ++ adj]
+  return $ PP.text (result ++ " than")
+
+eqCompare :: IO Doc
+eqCompare = do 
+  adj <- generate $ elements W.adjectives
+  return $ PP.text "as" PP.<+> PP.text adj PP.<+> PP.text "as"
 
 {-- Pretty Printing functions --}
 
@@ -107,7 +154,9 @@ splPretty :: String -> IO ()
 splPretty fileName = do
   program <- parseFile fileName
   doc <- pp program
-  putStr $ PP.render doc
+  putStr $ PP.renderStyle (PP.Style {PP.mode = PP.PageMode, 
+                                     PP.lineLength = 80,
+                                     PP.ribbonsPerLine = 1.0}) doc
 
 instance PP Character where
   pp (Character name desc) = liftM3 (\x y z -> x PP.<> y PP.<+> z) 
@@ -129,7 +178,7 @@ instance PP Statement where
   pp (Exit name) = (\x -> PP.lbrack PP.<> PP.text "Exit" PP.<+> x PP.<> PP.rbrack PP.<> newline) <$>
                    pp (capName name)
   pp (Line name sentence) = liftM3 (\x y z -> x PP.<> PP.colon PP.$$ PP.space PP.<> y PP.<> z PP.<> newline) 
-                                   (pp $ capName name) (pp sentence) exclamOrPeriod
+                                   (pp $ capName name) (pp sentence) (punctuation sentence)
 
 instance PP (Statement, Annotation) where
   pp (s, _) = pp s
@@ -137,9 +186,9 @@ instance PP (Statement, Annotation) where
   pp (Enter _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
   pp (Exeunt _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
   pp (Exit _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
-  pp (Line name _, Annotation a _) = liftM2 (\n p -> n PP.<> PP.colon PP.$$ PP.space PP.<> 
+  pp (Line name sentence, Annotation a _) = liftM2 (\n p -> n PP.<> PP.colon PP.$$ PP.space PP.<> 
                                                 PP.text a PP.<> p PP.<> newline)
-                                      (return $ PP.text $ capName name) exclamOrPeriod --}
+                                      (return $ PP.text $ capName name) (punctuation sentence) --}
 
 instance PP Sentence where
   pp (IfSo s) = (\ x -> PP.text "If so," PP.<+> x) <$> pp s
@@ -148,9 +197,12 @@ instance PP Sentence where
   pp OutputCharacter = return $ PP.text "Speak your mind"
   pp InputNumber = return $ PP.text "Listen to your heart"
   pp InputCharacter = return $ PP.text "Open your mind"
+  pp (Declaration (Constant 0)) = liftM2 (PP.<+>) secondPersonDeclare (pp $ Constant 0)
+  pp (Declaration (Constant n)) = liftM2 (\you ex -> fixConstant you ex) 
+    secondPersonNonZeroConst (pp $ Constant n)
   pp (Declaration e) = liftM2 (PP.<+>) secondPersonDeclare (pp e)
   pp (Push r) = (\x -> PP.text "Remember" PP.<+> x) <$> pp r
-  pp Pop = return $ PP.text "Recall your imminent death!" -- TODO: randomize this
+  pp Pop = return $ PP.text "Recall your imminent death" -- TODO: randomize this
   pp (GotoScene l) = liftM2 (\x y -> x PP.<+> PP.text "Scene" PP.<+> y) goTo (pp l)
   pp (GotoAct l) = liftM2 (\x y -> x PP.<+> PP.text "Act" PP.<+> y) goTo (pp l)
   pp (Conditional c) = pp c
@@ -193,10 +245,26 @@ instance PP Expression where
   pp (Var r) = pp r
 
 instance PP Comparison where
-  pp (Comparison r e1 e2) = undefined
+  pp (Comparison relationship (Var (They name)) e2) = liftM2 
+    (\rel ex -> PP.text ("Is " ++ capName name) PP.<+> rel PP.<+> ex)
+    (pp relationship) (pp e2)
+  pp (Comparison relationship (Var You) e2) = liftM3
+    (\ru rel ex -> ru PP.<+> rel PP.<+> ex)
+    (areYou) (pp relationship) (pp e2)
+  pp (Comparison relationship (Var Me) e2) = liftM2
+    (\rel ex -> PP.text "Am I" PP.<+> rel PP.<+> ex)
+    (pp relationship) (pp e2)
+  pp (Comparison relationship e1 e2) = liftM3
+    (\ex1 rel ex2 -> PP.text "Is" PP.<+> ex1 PP.<+> rel PP.<+> ex2)
+    (pp e1) (pp relationship) (pp e2)
 
 instance PP Relationship where
-  pp l = undefined
+  pp Lt = negativeCompare
+  pp Gt = positiveCompare
+  pp Le = (\posComp -> PP.text "not" PP.<+> posComp) <$> positiveCompare
+  pp Ge = (\negComp -> PP.text "not" PP.<+> negComp) <$> negativeCompare
+  pp E = eqCompare
+  pp Ne = (\eqComp -> PP.text "not" PP.<+> eqComp) <$> eqCompare
 
 instance PP Block where
   pp l = foldM (\d (s, a) -> liftM2 (PP.$$) (return d) (pp (s, a)))
