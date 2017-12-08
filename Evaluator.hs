@@ -418,7 +418,11 @@ run :: ProgIO m => Program -> Store -> m (Maybe Exception)
 run (Program _ actMap) s = continue actMap (Start s)
 
 runIO' :: Program -> Maybe Int -> IO ()
-runIO' p n = run p (withSteps n) >> return ()
+runIO' p n = do
+  res <- run p (withSteps n)
+  case res of
+    Nothing -> return ()
+    Just e  -> putStrLn (exceptionPretty e)
 
 runIO :: Program -> IO ()
 runIO p = runIO' p Nothing

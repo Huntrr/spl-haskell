@@ -45,7 +45,7 @@ instance PP Exception where
     pp a $$ pp s $$ text "Branch with condition still undefined"
 
   pp (OutOfSteps b s) =
-    text "Out of steps!" $$ pp s $$ text "BLOCK:" $$ pp b
+    text "Out of steps!" $$ pp s $$ text "REST OF BLOCK:" $$ pp b
 
   pp (InvalidAct l) =
     text $ "Can't jump to invalid act, Act " ++ toRoman l
@@ -87,7 +87,7 @@ instance PP Store where
               (nest 30 $ text "On stage:" $$ pp stage)
 
 instance PP Block where
-  pp l = text "REST OF BLOCK:" $$ vcat (pp . snd <$> l)
+  pp l = vcat (pp . snd <$> l)
 
 instance PP (Map CName (Value, [Value])) where
   pp = foldrWithKey f empty where

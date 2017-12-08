@@ -16,12 +16,13 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    file:_ -> runFile file
+    file:n:_ -> runFile file (Just $ read n)
+    file:_ -> runFile file Nothing
     _        -> error "Proper usage: spl filename"
 
-runFile :: String -> IO ()
-runFile file = do p <- parseFile file
-                  runIO p
+runFile :: String -> Maybe Int -> IO ()
+runFile file n = do p <- parseFile file
+                    runIO' p n
 
 runFileInts :: String -> [Int] -> IO ()
 runFileInts file input = do p <- parseFile file
