@@ -8,7 +8,7 @@ module AST where
 
 import Data.Map (Map)
 import qualified Data.Map.Lazy as Map
-import Text.Megaparsec (SourcePos)
+import Text.Megaparsec (SourcePos, initialPos)
 
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -63,6 +63,7 @@ instance Eq Exception where
   _ == _ = True
 
 data Annotation = Annotation String SourcePos deriving (Eq, Show)
+blankAnnotation = Annotation "" (initialPos "")
 
 data Header = Header Title [Character] deriving (Eq, Show)
 

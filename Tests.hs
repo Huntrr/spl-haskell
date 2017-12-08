@@ -2,8 +2,6 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
--- TODO: remove -fdefer-type-errors
-{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns -fdefer-type-errors #-}
 
 module Tests where
 
@@ -14,7 +12,7 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        classify, elements, frequency, listOf,
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
-                                       stdArgs, (==>))
+                                       stdArgs, (==>), choose, generate)
 
 import Data.Char (ord, chr)
 
@@ -29,6 +27,7 @@ import           Evaluator
 import           LanguageParser
 import           PrettyPrinter
 import           Main
+import qualified WordLists            as W
 
 main :: IO ()
 main = do
@@ -244,8 +243,109 @@ prop_roundtrip s = P.parse programP "" (render s) == Right s
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
 
 ------------- Arbitrary Instance -------------
--- TODO
+number :: [a] -> [(Int, a)]
+number = zip [1..]
+
+arbCname :: Gen CName
+arbCname = elements W.characters
+
+genSentence :: Int -> Gen Sentence
+genSentence n = frequency [
+    (n,  IfSo <$> genSentence n'),
+    (n,  IfNot <$> genSentence n'),
+    (10, elements [ OutputNumber, OutputCharacter, Pop ]),
+    (1, elements [ InputNumber, InputCharacter ]),
+    (5, Declaration <$> genExp n'),
+    (10, Push <$> arbitrary),
+    (5, Conditional <$> genComparison n'),
+    (n, GotoScene <$> choose (1, 5)),
+    (n, GotoAct <$> choose (1, 5))
+  ] where n' = n `div` 2
+
+genComparison :: Int -> Gen Comparison
+genComparison n = Comparison <$>
+  (elements [Lt, Le, E, Ne, Gt, Ge]) <*> (genExp n') <*> (genExp n')
+  where n' = n `div` 2
+
+genExp :: Int -> Gen Expression
+genExp n = frequency [
+    (1, Constant <$> arbitrary),
+    (n', chooseBop <*> genExp n' <*> genExp n'),
+    (n', chooseOp <*> genExp n'),
+    (1, Var <$> arbitrary)
+  ] where 
+    n' = n `div` 2
+    chooseBop = elements [Sum, Difference, Product, Quotient, Mod]
+    chooseOp  = elements [Square, Cube, SquareRoot, Twice]
+
+instance Arbitrary Comparison where
+  arbitrary = sized genComparison
+  shrink (Comparison r e1 e2) = [Comparison r e1' e2' | e1' <- shrink e1,
+                                                        e2' <- shrink e2]
+
+instance Arbitrary Expression where
+  arbitrary = sized genExp
+  shrink (Constant v)     = [Constant v' | v' <- shrink v]
+  shrink (Sum a b)        = [Sum a' b' | a' <- shrink a, b' <- shrink b]
+  shrink (Difference a b) = [Difference a' b' | a' <- shrink a, b' <- shrink b]
+  shrink (Product a b)    = [Product a' b' | a' <- shrink a, b' <- shrink b]
+  shrink (Quotient a b)   = [Quotient a' b' | a' <- shrink a, b' <- shrink b]
+  shrink (Square a)       = [Square a' | a' <- shrink a]
+  shrink (Cube a)         = [Cube a' | a' <- shrink a]
+  shrink (SquareRoot a)   = [SquareRoot a' | a' <- shrink a]
+  shrink (Twice a)        = [Twice a' | a' <- shrink a]
+  shrink (Mod a b)        = [Mod a' b' | a' <- shrink a, b' <- shrink b]
+  shrink (Var r)          = [Var r' | r' <- shrink r]
+
+instance Arbitrary Reference where
+  arbitrary = oneof [
+      elements [ You, Me ],
+      They <$> arbCname
+    ]
+  shrink _ = []
+
+instance Arbitrary Sentence where
+  arbitrary = sized genSentence
+  shrink (IfSo s)        = shrink s
+  shrink (IfNot s)       = shrink s
+  shrink (Declaration e) = [Declaration e' | e' <- shrink e]
+  shrink (Push r)        = [Push r' | r' <- shrink r]
+  shrink (GotoScene l)   = [GotoScene l' | l' <- shrink l]
+  shrink (GotoAct l)     = [GotoAct l' | l' <- shrink l]
+  shrink (Conditional c) = [Conditional c' | c' <- shrink c]
+  shrink _               = []
+
+instance Arbitrary Statement where
+  arbitrary = frequency [
+      (12, Enter <$> listOf arbCname),
+      (6,  Exit <$> arbCname),
+      (1,  Exeunt <$> listOf arbCname),
+      (10, Line <$> arbCname <*> sized genSentence)
+    ]
+  shrink (Enter ns)  = [Enter n | n <- shrink ns]
+  shrink (Exeunt ns) = [Exeunt n | n <- shrink ns]
+  shrink (Exit n)    = []
+  shrink (Line n s)  = [Line n s' | s' <- shrink s]
+
+instance Arbitrary Annotation where
+  arbitrary = elements [blankAnnotation]
+  shrink a = [a]
+
+instance Arbitrary Scene where
+  arbitrary = Scene "" <$> arbitrary
+  shrink (Scene d b) = Scene d <$> [b' | b' <- shrink b]
+
+instance Arbitrary Act where
+  arbitrary = Act "" <$> (Map.fromList . number <$> arbitrary)
+  shrink (Act d sceneMap) =
+    let list  = snd <$> Map.toList sceneMap
+        list' = [ act | act <- shrink list ]
+     in Act d . Map.fromList . number <$> take (length list `div` 2) list'
 
 instance Arbitrary Program where
-  arbitrary = undefined
-  shrink = undefined
+  arbitrary = Program (Header "" []) <$>
+    (Map.fromList . number <$> arbitrary)
+  shrink (Program h actMap) =
+    let list  = snd <$> Map.toList actMap
+        list' = [ act | act <- shrink list ]
+     in Program h . Map.fromList . number <$> take (length list `div` 2) list'
