@@ -18,7 +18,7 @@ import Control.Monad.State (MonadState(..), StateT, State, runState, runStateT)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 import Control.Monad.Cont (MonadCont(..), ContT, Cont, runCont, runContT)
 
-
+import ExceptionPrinter
 import AST
 
 -- TODO: Store will probably change
@@ -279,11 +279,11 @@ executeAct map b handleIO = do
 
 firstScene = 1
 
-continueFixed :: Map Label Act -> Partial (Maybe Block) -> [Int] -> String
+continueFixed :: Map Label Act -> Partial (Maybe Block) -> [Int] -> Either String Exception
 continueFixed actMap = go [] where
-  go :: String -> Partial (Maybe Block) -> [Int] -> [Char]
-  go _ (Fail e) _   = "Exception: " ++ (show e)
-  go res Complete _ = res ++ "\n"
+  go :: String -> Partial (Maybe Block) -> [Int] -> Either String Exception
+  go _ (Fail e) _   = Right e
+  go res Complete _ = Left $ res ++ "\n"
   go res (Start state) input = go res (Continue (Nothing, state)) input
   go res (Continue (block, state)) input = go
     (res ++ out)
@@ -309,10 +309,10 @@ continueIO :: Map Label Act -> Partial (Maybe Block) -> IO ()
 continueIO actMap = go where
   go :: Partial (Maybe Block) -> IO ()
   go (Fail e) = do
-    putStrLn $ "Exception: " ++ (show e)
+    putStrLn $ exceptionPretty e
     return ()
   go Complete = do
-    putStrLn $ "\n"
+    putStr $ "\n"
     return ()
   go (Start state) = go $ Continue (Nothing, state)
   go (Continue (block, state)) = do
@@ -351,17 +351,17 @@ runM m s = runCont (runStateT (runExceptT m) s)
 runIO :: Program -> IO ()
 runIO (Program _ actMap) = continueIO actMap (Start emptyState)
 
-runFixed :: Program -> [Int] -> String
+runFixed :: Program -> [Int] -> Either String Exception
 runFixed (Program _ actMap) = continueFixed actMap (Start emptyState)
 
-runInt :: Program -> [Int] -> String
+runInt :: Program -> [Int] -> Either String Exception
 runInt = runFixed
 
-runString :: Program -> String -> String
+runString :: Program -> String -> Either String Exception
 runString program input = let input' = stringInput input
              in runFixed program input'
 
-runList :: Program -> [Either Int Char] -> String
+runList :: Program -> [Either Int Char] -> Either String Exception
 runList program input = let input' = listInput input
                          in runFixed program input'
 

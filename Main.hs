@@ -2,10 +2,12 @@
     FlexibleInstances #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
-module Main where
+module Main (main, runFile, runFileInts, runFileString) where
 -- | provides command line interface for interpreting SPL code
 import LanguageParser
 import Evaluator
+import AST (Exception)
+import ExceptionPrinter
 
 import System.Environment (getArgs)
 
@@ -22,8 +24,12 @@ runFile file = do p <- parseFile file
 
 runFileInts :: String -> [Int] -> IO ()
 runFileInts file input = do p <- parseFile file
-                            putStr $ runInt p input
+                            printResult $ runInt p input
 
 runFileString :: String -> String -> IO ()
 runFileString file input = do p <- parseFile file
-                              putStr $ runString p input
+                              printResult $ runString p input
+
+printResult :: Either String Exception -> IO ()
+printResult (Right e) = putStr $ exceptionPretty e
+printResult (Left r)  = putStr r
