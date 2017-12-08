@@ -44,6 +44,9 @@ instance PP Exception where
   pp (UndefinedCondition a s)   =
     pp a $$ pp s $$ text "Branch with condition still undefined"
 
+  pp (OutOfSteps b s) =
+    text "Out of steps!" $$ pp s $$ text "BLOCK:" $$ pp b
+
   pp (InvalidAct l) =
     text $ "Can't jump to invalid act, Act " ++ toRoman l
 
@@ -75,13 +78,16 @@ instance PP (CName, InputType) where
      InInt  -> text "Int") <> text c
 
 instance PP Store where
-  pp (Store vars stage cond output input act scene) =
+  pp (Store vars stage cond output input act scene _) =
     text ("Act " ++ toRoman act ++ ", Scene " ++ toRoman scene) <+>
       brackets (text "Condition:" <+> pp cond <> comma <+>
         text "Output:" <+> pp output <> comma <+>
           text "Input:" <+> pp input <> comma) $$
             (text "Variables:" $$ pp vars) $$
               (nest 30 $ text "On stage:" $$ pp stage)
+
+instance PP Block where
+  pp l = text "REST OF BLOCK:" $$ vcat (pp . snd <$> l)
 
 instance PP (Map CName (Value, [Value])) where
   pp = foldrWithKey f empty where

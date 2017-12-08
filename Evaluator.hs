@@ -2,7 +2,7 @@
     FlexibleInstances, ScopedTypeVariables #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
-module Evaluator (runIO, runInt, runString, runList) where
+module Evaluator (runIO, runInt, runString, runList, runFixed', runIO') where
 
 import Data.Char (ord, chr)
 
@@ -186,6 +186,15 @@ getValue a c = do
     Nothing     -> return 0
     Just (v, _) -> return v
 
+decrTimer :: (MonadCont m, MonadState Store m, MonadError Exception m) =>
+  (() -> m (Maybe Block)) -> m ()
+decrTimer halt = do
+  state <- get
+  case timer state of
+    Nothing -> return ()
+    Just v  -> if v <= 0 then halt () >> return ()
+                         else put $ state { timer = Just (v - 1) }
+
 
 
 
@@ -237,8 +246,9 @@ executeBlock :: forall m.
 executeBlock b handleIO gotoAct nextScene gotoScene = go b where
   go :: Block -> m (Maybe Label)
   go [] = return nextScene
-  go (s:rest) = do
-    evalStatement (\() -> handleIO (Just rest))
+  go (s:rest) = let halt () = handleIO (Just rest) in do
+    decrTimer halt
+    evalStatement halt
       (gotoAct . Just) (gotoScene . Just) s
     go rest
 
@@ -369,8 +379,9 @@ continue actMap = go where
   go (Continue (block, state)) = do
     putOutput (output state)
     variables' <- readInput (awaitingInput state) (variables state)
-    go $ runM (callCC $ executeAct actMap block)
-         (updateState state variables') cont
+    if outOfSteps state then go (Fail $ OutOfSteps block state) else
+      go $ runM (callCC $ executeAct actMap block)
+        (updateState state variables') cont
     
   putOutput Nothing  = return ()
   putOutput (Just c) = outStr c
@@ -380,6 +391,10 @@ continue actMap = go where
              InChar -> inChar
              InInt  -> inInt
     return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) m
+
+  outOfSteps state = case timer state of
+                       Nothing -> False
+                       Just v  -> v <= 0
 
   cont :: (Either Exception (Maybe Block), Store) -> Partial (Maybe Block)
   cont (Left e, _)                 = Fail e
@@ -399,16 +414,25 @@ continue actMap = go where
 -- | these run_____ functions run programs. If not for our testing code   | --
 -- | these would be the only functions we'd export from this module.      | --
 ------------------------------------------------------------------------------
+run :: ProgIO m => Program -> Store -> m (Maybe Exception)
+run (Program _ actMap) s = continue actMap (Start s)
+
+runIO' :: Program -> Maybe Int -> IO ()
+runIO' p n = run p (withSteps n) >> return ()
+
 runIO :: Program -> IO ()
-runIO (Program _ actMap) = continue actMap (Start emptyState) >> return ()
+runIO p = runIO' p Nothing
+
+runFixed' :: Program -> Maybe Int -> [Int] -> Either String Exception
+runFixed' p n i = let (res, FixedIO _ o) = runState
+                        (run p (withSteps n))
+                        (FixedIO i "")
+                    in case res of
+                           Just e -> Right e
+                           Nothing -> Left o
 
 runFixed :: Program -> [Int] -> Either String Exception
-runFixed (Program _ actMap) i = let (res, FixedIO _ o) = runState
-                                      (continue actMap (Start emptyState))
-                                      (FixedIO i "")
-                                 in case res of
-                                      Just e -> Right e
-                                      Nothing -> Left o
+runFixed p = runFixed' p Nothing
 
 runInt :: Program -> [Int] -> Either String Exception
 runInt = runFixed
@@ -422,6 +446,8 @@ runList program input = let input' = listInput input
                          in runFixed program input'
 
 -- | testing utils
+withSteps mi = emptyState { timer = mi }
+
 listInput :: [Either Int Char] -> [Int]
 listInput = map f where
   f (Left i)  = i

@@ -21,9 +21,10 @@ data Store = Store { variables     :: Map CName (Value, [Value])
                    , awaitingInput :: Maybe (CName, InputType)
                    , act           :: Label
                    , scene         :: Label
+                   , timer         :: Maybe Int
                    } deriving (Eq, Show)
 
-emptyState = Store Map.empty Set.empty Nothing Nothing Nothing 1 1
+emptyState = Store Map.empty Set.empty Nothing Nothing Nothing 1 1 Nothing
 
 data InputType = InChar | InInt deriving (Eq, Show)
 
@@ -44,6 +45,7 @@ data Exception = DivideByZero Annotation                     |
                  NotOnStage CName Annotation (Set CName)     |
                  AlreadyOnStage CName Annotation (Set CName) |
                  UndefinedCondition Annotation Store         |
+                 OutOfSteps (Maybe Block) Store              |
                  InvalidAct Label                            |
                  InvalidScene Label deriving (Eq, Show)
 

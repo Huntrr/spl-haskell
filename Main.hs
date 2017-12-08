@@ -8,6 +8,7 @@ import LanguageParser
 import Evaluator
 import AST (Exception)
 import ExceptionPrinter
+import Stepper
 
 import System.Environment (getArgs)
 
