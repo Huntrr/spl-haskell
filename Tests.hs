@@ -8,12 +8,15 @@
 module Tests where
 
 import           Test.HUnit           (Assertion, Test (..), assert,
-                                       assertFailure, runTestTT, (~:), (~?=))
+                                       assertFailure, runTestTT, (~:), (~?=),
+                                       (@?=))
 import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        classify, elements, frequency, listOf,
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>))
+
+import Data.Char (ord, chr)
 
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
@@ -25,6 +28,7 @@ import           Data.Either.Extra
 import           Evaluator
 import           LanguageParser
 import           PrettyPrinter
+import           Main
 
 main :: IO ()
 main = do
@@ -38,19 +42,22 @@ main = do
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
 quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100 }
 
+file f = "samples/" ++ f ++ ".spl"
 
-raises :: Program -> Exception -> Test
-s `raises` v = case (execute s emptyState) of
-   (Left v',_) -> v ~?= v'
-   _           -> TestCase $ assertFailure "Error in raises"
+raises :: String -> [Int] -> Exception -> Test
+raises p i v = p ~: TestCase $ do
+  result <- evaluateFile (file p) i
+  case result of
+    (Right e) -> e @?= v
+    (Left _)  -> assertFailure "No exception"
 
+outputs :: String -> [Int] -> String -> Test
+outputs p i o = p ~: TestCase $ do
+  result <- evaluateFile (file p) i
+  case result of
+    (Right _) -> assertFailure "Exception"
+    (Left v)  -> v @?= o
 
------------- Sample Programs -----------------
-samplePrograms = [ ("hello", [], "Hello World!")
-                 , ("primes", [], "12357111315")
-                 , ("reverse", ['a', 'b', 'c', 'd', '0'], "dcba") ]
-
--- TODO: Run all these programs with given inputs and check for outputs
 
 ------------ HUnit Tests ---------------------
 -- TODO: PARSER
@@ -190,16 +197,28 @@ testParseSentence =
 -- TODO: PRETTY PRINTER
 
 
--- TODO: EVALUATOR
+------------ EVALUATOR ----------------------
+evaluatorTests :: Test
+evaluatorTests = TestList [
+    sampleTest
+  ]
+------------ Sample Programs -----------------
+samplePrograms = [ ("hello", [], "Hello World!\n")
+                 , ("primes", [20], ">2\n3\n5\n7\n11\n13\n17\n19\n")
+                 , ("reverse", toInts "abcdef\n", "fedcba")
+                 , ("bottles", [], "15 bottles of beer on the wall, 15 bottles of beer.\r\nTake one down, pass it around, 14 bottles of beer on the wall.\r\n14 bottles of beer on the wall, 14 bottles of beer.\r\nTake one down, pass it around, 13 bottles of beer on the wall.\r\n13 bottles of beer on the wall, 13 bottles of beer.\r\nTake one down, pass it around, 12 bottles of beer on the wall.\r\n12 bottles of beer on the wall, 12 bottles of beer.\r\nTake one down, pass it around, 11 bottles of beer on the wall.\r\n11 bottles of beer on the wall, 11 bottles of beer.\r\nTake one down, pass it around, 10 bottles of beer on the wall.\r\n10 bottles of beer on the wall, 10 bottles of beer.\r\nTake one down, pass it around, 9 bottles of beer on the wall.\r\n9 bottles of beer on the wall, 9 bottles of beer.\r\nTake one down, pass it around, 8 bottles of beer on the wall.\r\n8 bottles of beer on the wall, 8 bottles of beer.\r\nTake one down, pass it around, 7 bottles of beer on the wall.\r\n7 bottles of beer on the wall, 7 bottles of beer.\r\nTake one down, pass it around, 6 bottles of beer on the wall.\r\n6 bottles of beer on the wall, 6 bottles of beer.\r\nTake one down, pass it around, 5 bottles of beer on the wall.\r\n5 bottles of beer on the wall, 5 bottles of beer.\r\nTake one down, pass it around, 4 bottles of beer on the wall.\r\n4 bottles of beer on the wall, 4 bottles of beer.\r\nTake one down, pass it around, 3 bottles of beer on the wall.\r\n3 bottles of beer on the wall, 3 bottles of beer.\r\nTake one down, pass it around, 2 bottles of beer on the wall.\r\n2 bottles of beer on the wall, 2 bottles of beer.\r\nTake one down, pass it around, 1 bottle of beer on the wall.\r\n1 bottle of beer on the wall, 1 bottle of beer.\r\nTake one down, pass it around, 0 bottles of beer on the wall.\r\n")
+                 ]
+
+toInts = map f where
+  f '\n' = -1
+  f c    = ord c
+
+sampleTest :: Test
+sampleTest = TestList $ map f samplePrograms where
+  f (fn, i, o) = outputs fn i o
+
 -- Mostly handled with samplePrograms tests, but should also test edge cases
 -- and errors!
-
--- EmptyStack
--- Divide by Zero
--- Goto unknown scene/act
--- Calling out of scope variable
--- Ambiguous assignment
--- Bad if statement
 
 
 ------------- QUICKCHECK --------------------

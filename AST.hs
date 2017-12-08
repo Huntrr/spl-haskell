@@ -47,7 +47,20 @@ data Exception = DivideByZero Annotation                     |
                  UndefinedCondition Annotation Store         |
                  OutOfSteps (Maybe Block) Store              |
                  InvalidAct Label                            |
-                 InvalidScene Label deriving (Eq, Show)
+                 InvalidScene Label deriving (Show)
+
+instance Eq Exception where
+  DivideByZero _ == DivideByZero _ = True
+  UnrealAnswer _ == UnrealAnswer _ = True
+  EmptyStack _ _ == EmptyStack _ _ = True
+  AmbiguousYou _ _ == AmbiguousYou _ _ = True
+  NotOnStage _ _ _ == NotOnStage _ _ _ = True
+  AlreadyOnStage _ _ _ == AlreadyOnStage _ _ _ = True
+  UndefinedCondition _ _ == UndefinedCondition _ _ = True
+  OutOfSteps _ _ == OutOfSteps _ _ = True
+  InvalidAct _ == InvalidAct _ = True
+  InvalidScene _ == InvalidScene _ = True
+  _ == _ = True
 
 data Annotation = Annotation String SourcePos deriving (Eq, Show)
 

@@ -2,7 +2,7 @@
     FlexibleInstances #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
-module Main (main, runFile, runFileInts, runFileString) where
+module Main where
 -- | provides command line interface for interpreting SPL code
 import LanguageParser
 import Evaluator
@@ -31,6 +31,10 @@ runFileInts file input = do p <- parseFile file
 runFileString :: String -> String -> IO ()
 runFileString file input = do p <- parseFile file
                               printResult $ runString p input
+
+evaluateFile :: String -> [Int] -> IO (Either String Exception)
+evaluateFile file input = do p <- parseFile file
+                             return (runInt p input)
 
 printResult :: Either String Exception -> IO ()
 printResult (Right e) = putStr $ exceptionPretty e
