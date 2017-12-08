@@ -45,7 +45,11 @@ parseUntilEndBracket = P.takeWhileP Nothing (/= ']')
 -- parse one of the given strings, case-insensitively
 oneOfString' :: [String] -> Parser String
 oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
-                 P.notFollowedBy P.letterChar)) <$> l)
+                 P.notFollowedBy invalid)) <$> l)
+                 where
+                   -- a word can only be followed by either a space or end punctuation
+                   invalid :: Parser Char
+                   invalid = P.satisfy (\x -> isAlpha x || x == '-')
 
 constP :: a -> Parser b -> Parser a
 constP a p = const a <$> (p <* P.space)
@@ -58,6 +62,7 @@ oneOfCharacterNames = map toLower <$>
 
 oneOfSecondPersonPos :: Parser String
 oneOfSecondPersonPos = oneOfString' W.secondPersonPossessive
+                       P.<?> "a second person possesive"
 
 -- TODO: Next are compile time checks.
 testParse file = do
@@ -88,7 +93,7 @@ characterP :: Parser Character
 characterP = liftA2 Character
              (oneOfCharacterNames <* P.space <* P.char ',' <* P.space)
              (parseUntilEndPunc' <* P.space)
-             P.<?> "a valid Character declaration"
+             P.<?> "a valid character declaration"
 
 actP :: Parser (Label, Act)
 actP = liftA3 (\lab desc mp -> (lab, Act desc mp))
@@ -128,6 +133,7 @@ enterP = swap <$> liftA2 (,) enterExitAnnotationP enterP'
             enterP' = Enter <$> (P.char '[' *> P.space *> P.string' "Enter" *>
                       P.space1 *> (P.try double <|> single) <* P.space <*
                       P.char ']' <* P.space)
+                      P.<?> "an enter scene"
 
 exitP :: Parser (Statement, Annotation)
 exitP = swap <$> liftA2 (,) enterExitAnnotationP exitP'
@@ -135,6 +141,7 @@ exitP = swap <$> liftA2 (,) enterExitAnnotationP exitP'
            exitP' = Exit <$> (P.char '[' *> P.space *> P.string' "Exit" *>
                     P.space1 *> oneOfCharacterNames <* P.space <*
                     P.char ']' <* P.space)
+                    P.<?> "an exit scene"
 
 exeuntP :: Parser (Statement, Annotation)
 exeuntP = swap <$> liftA2 (,) enterExitAnnotationP exeuntP'
@@ -142,6 +149,7 @@ exeuntP = swap <$> liftA2 (,) enterExitAnnotationP exeuntP'
              exeuntP' = Exeunt <$> (P.char '[' *> P.space *> P.string'
                         "Exeunt" *> (P.try (P.space1 *> double) <|> none) <*
                         P.space <* P.char ']' <* P.space)
+                        P.<?> "an exeunt scene"
 
 none :: Parser [String]
 none = const [] <$> P.takeP Nothing 0
@@ -158,6 +166,7 @@ double = liftA2 (\a b -> [a, b])
 lineP :: Parser [(Statement, Annotation)]
 lineP = liftA2 combine (Line <$> oneOfCharacterNames <* P.char ':' <* P.space)
         listOfSentenceP <* P.space
+        P.<?> "a line"
         where
           combine line senAnnList = (\(s, a) -> (line s, a)) <$> senAnnList
 
