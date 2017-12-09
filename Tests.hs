@@ -194,7 +194,9 @@ testParseSentence =
         ~?= Declaration (Constant 0),
       parseUnwrap "Remember me!" ~?= Push Me,
       parseUnwrap "Remember Hamlet!" ~?= Push (They "hamlet"),
-      parseUnwrap "Recall your unhappy childhood!" ~?= Pop
+      parseUnwrap "Recall your unhappy childhood!" ~?= Pop,
+      parseUnwrap "You are a good fat-kidneyed trustworthy blister."
+        ~?= Declaration (Constant (-8))
     ]
 
 -- TODO: PRETTY PRINTER
