@@ -218,6 +218,10 @@ samplePrograms = [ ("hello", [], "Hello World!\n")
                  , ("fibonacci", [], "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n10946\n17711\n28657\n46368\n75025\n121393\n196418\n317811\n514229\n832040\n1346269\n2178309\n3524578\n5702887\n9227465\n14930352\n24157817\n39088169\n63245986\n102334155\n165580141\n267914296\n433494437\n701408733")
                  , ("guess", toInts "=", "500?\r\n500\r\n")
                  , ("guess", toInts ">><<>=", "500?\r\n750?\r\n875?\r\n812?\r\n781?\r\n796?\r\n796\r\n")
+                 , ("bubble-sort", toInts "12345", "12345")
+                 , ("bubble-sort", toInts "97531", "13579")
+                 , ("bubble-sort", toInts "20452", "02245")
+                 , ("bubble-sort", toInts "11110", "01111")
                  ]
 
 toInts = map f where
@@ -230,6 +234,12 @@ sampleTest = TestList $ map f samplePrograms where
 
 -- Mostly handled with samplePrograms tests, but should also test edge cases
 -- and errors!
+
+-- evalExpression
+
+-- evalComparison
+
+-- evalSentence
 
 
 ------------- QUICKCHECK --------------------

@@ -60,6 +60,9 @@ oneOfCharacterNames = map toLower <$>
                       P.<?>
                       "a valid Shakespeare character"
 
+oneOfZero :: Parser String
+oneOfZero = oneOfString' W.zero P.<?> "zero"
+
 oneOfSecondPersonPos :: Parser String
 oneOfSecondPersonPos = oneOfString' W.secondPersonPossessive
                        P.<?> "a second person possesive"
@@ -342,7 +345,7 @@ expressionP = P.try varP <|>
               P.try modP
 
 constantP :: Parser Expression
-constantP = P.try (constP (Constant 0) (P.string' "nothing" <* P.space)) <|>
+constantP = P.try (constP (Constant 0) (oneOfZero <* P.space)) <|>
             P.try (genericConstant (2 ^) (W.positiveNouns ++ W.neutralNouns)) <|>
             genericConstant (negate . (2 ^)) W.negativeNouns
             where
