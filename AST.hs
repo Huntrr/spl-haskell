@@ -64,6 +64,7 @@ instance Eq Exception where
 
 data Annotation = Annotation String SourcePos deriving (Eq, Show)
 blankAnnotation = Annotation "" (initialPos "")
+zeroAnnotation s = Annotation s (initialPos "")
 
 data Header = Header Title [Character] deriving (Eq, Show)
 

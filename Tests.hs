@@ -16,6 +16,7 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        stdArgs, (==>), choose, generate,
                                        sublistOf)
 
+import Debug.Trace
 import Data.Char (ord, chr)
 
 import           Data.Map             (Map)
@@ -32,6 +33,7 @@ import           LanguageParser
 import           PrettyPrinter
 import           Main
 import qualified WordLists            as W
+import Text.PrettyPrint (render)
 
 main :: IO ()
 main = do
@@ -229,7 +231,7 @@ sampleTest = TestList $ map f samplePrograms where
 ------------- QUICKCHECK --------------------
 ------------- Roundtrip property -------------
 prop_roundtrip :: Program -> Bool
-prop_roundtrip s = P.parse programP "" (render s) == Right s
+prop_roundtrip s = undefined
 -- ^^ TODO THIS WON'T WORK
 -- (Constant 7
 --       => "the sum of a large angry red king and a rat"
@@ -252,23 +254,24 @@ prop_roundtrip s = P.parse programP "" (render s) == Right s
 number :: [a] -> [(Int, a)]
 number = zip [1..]
 
+chars = ["Romeo", "Juliet", "Hamlet", "Ophelia", "Othello", "Puck", "The Ghost"]
 arbCname :: Gen CName
-arbCname = elements W.characters
+arbCname = elements chars
 
 genSentence :: Int -> Gen Sentence
-genSentence n = oneof [
-    pure OutputNumber,
-    pure OutputCharacter,
-    pure InputNumber,
-    pure InputCharacter,
-    Declaration <$> arbitrary,
-    Push <$> arbitrary,
-    pure Pop,
-    Conditional <$> arbitrary,
-    GotoScene <$> arbitrary,
-    GotoAct <$> arbitrary,
-    IfSo <$> genSentence n',
-    IfNot <$> genSentence n'
+genSentence n = frequency [
+    (6, pure OutputNumber),
+    (6, pure OutputCharacter),
+    (3, pure InputNumber),
+    (3, pure InputCharacter),
+    (8, Declaration <$> arbitrary),
+    (3, Push <$> arbitrary),
+    (1, pure Pop),
+    (12, Conditional <$> arbitrary),
+    (7, GotoScene <$> choose (1, 6)),
+    (7, GotoAct <$> choose (1, 6)),
+    (3, IfSo <$> genSentence n'),
+    (3, IfNot <$> genSentence n')
   ] where n' = n `div` 2
 
 genComparison :: Int -> Gen Comparison
@@ -328,8 +331,8 @@ instance Arbitrary Sentence where
 genStatement :: Set CName -> Int -> Gen (Set CName, [Statement])
 genStatement stage n
   | ns == 0   = genEnter
-  | ns == 1   = frequency [(1, genExit), (3, genEnter)]
-  | otherwise = frequency [(1, genExit), (2, genEnter), (2, genLine)]
+  | ns == 1   = frequency [(1, genExit), (4, genEnter)]
+  | otherwise = frequency [(1, genExit), (2, genEnter), (10, genLine)]
     where n'      = n `div` 2
           ns      = length stage
           list    = Set.toList stage
@@ -341,7 +344,7 @@ genStatement stage n
           genEnter = do
             cs <- Set.fromList <$> listOf arbCname
             let cs'  = Set.take 2 $ cs Set.\\ stage
-             in return (cs', [Enter (Set.toList cs')])
+             in return (Set.union cs' stage, [Enter (Set.toList cs')])
           genLine = do
             speaker <- elements list
             other   <- elements (Set.toList $ Set.delete speaker stage)
@@ -351,15 +354,13 @@ genStatement stage n
           disambiguate c1 c2 = let set   = Set.fromList [c1, c2]
                                    rest  = stage Set.\\ set
                                    lrest = Set.toList rest
-                                in pure (set, Exit <$> lrest,
-                                        Enter . (:[]) <$> lrest)
+                                in return (set, Exit <$> lrest,
+                                               Enter . (:[]) <$> lrest)
 
 genBlock :: Int -> Gen Block
 genBlock n = do
-  stage <- Set.fromList . take 2 <$> listOf arbCname
-  block <- gen stage n
-  let first = (, blankAnnotation) <$> [Exeunt [], Enter (Set.toList stage)]
-   in return $ first ++ block
+  block <- gen Set.empty n
+  return $ (Exeunt [], blankAnnotation) : block
   
   where
     gen stage n = frequency [
@@ -379,29 +380,28 @@ instance Arbitrary Statement where
       (10, Line <$> arbCname <*> sized genSentence)
     ]
   shrink _ = []
-  -- shrink (Enter ns)  = [Enter n | n <- shrink ns]
-  -- shrink (Exeunt ns) = [Exeunt n | n <- shrink ns]
-  -- shrink (Exit n)    = []
-  -- shrink (Line n s)  = [Line n s' | s' <- shrink s]
 
 instance Arbitrary Annotation where
   arbitrary = elements [blankAnnotation]
   shrink a = [a]
 
 instance Arbitrary Scene where
-  arbitrary = Scene "" <$> sized genBlock
+  arbitrary = Scene "SceneName" <$> sized genBlock
   shrink (Scene d b) = Scene d <$> [take n b | n <- [1..(length b - 1)]]
 
 instance Arbitrary Act where
-  arbitrary = Act "" <$> (Map.fromList . number <$> arbitrary)
+  arbitrary = Act "ActName" <$> (Map.fromList . number <$> list)
+    where
+      list = (:) <$> (arbitrary :: Gen Scene) <*> (arbitrary :: Gen [Scene])
   shrink (Act d sceneMap) =
     let list  = snd <$> Map.toList sceneMap
         list' = [ act | act <- shrink list ]
      in Act d . Map.fromList . number <$> take (length list `div` 2) list'
 
 instance Arbitrary Program where
-  arbitrary = Program (Header "" []) <$>
-    (Map.fromList . number <$> arbitrary)
+  arbitrary = Program (Header "Much Ado about Monads"
+    ((\c -> Character c "a character") <$> chars)) <$>
+      (Map.fromList . number <$> arbitrary)
   shrink (Program h actMap) =
     let list  = snd <$> Map.toList actMap
         list' = [ act | act <- shrink list ]
