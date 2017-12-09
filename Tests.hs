@@ -214,6 +214,10 @@ samplePrograms = [ ("hello", [], "Hello World!\n")
                  , ("primes", [20], ">2\n3\n5\n7\n11\n13\n17\n19\n")
                  , ("reverse", toInts "abcdef\n", "fedcba")
                  , ("bottles", [], "15 bottles of beer on the wall, 15 bottles of beer.\r\nTake one down, pass it around, 14 bottles of beer on the wall.\r\n14 bottles of beer on the wall, 14 bottles of beer.\r\nTake one down, pass it around, 13 bottles of beer on the wall.\r\n13 bottles of beer on the wall, 13 bottles of beer.\r\nTake one down, pass it around, 12 bottles of beer on the wall.\r\n12 bottles of beer on the wall, 12 bottles of beer.\r\nTake one down, pass it around, 11 bottles of beer on the wall.\r\n11 bottles of beer on the wall, 11 bottles of beer.\r\nTake one down, pass it around, 10 bottles of beer on the wall.\r\n10 bottles of beer on the wall, 10 bottles of beer.\r\nTake one down, pass it around, 9 bottles of beer on the wall.\r\n9 bottles of beer on the wall, 9 bottles of beer.\r\nTake one down, pass it around, 8 bottles of beer on the wall.\r\n8 bottles of beer on the wall, 8 bottles of beer.\r\nTake one down, pass it around, 7 bottles of beer on the wall.\r\n7 bottles of beer on the wall, 7 bottles of beer.\r\nTake one down, pass it around, 6 bottles of beer on the wall.\r\n6 bottles of beer on the wall, 6 bottles of beer.\r\nTake one down, pass it around, 5 bottles of beer on the wall.\r\n5 bottles of beer on the wall, 5 bottles of beer.\r\nTake one down, pass it around, 4 bottles of beer on the wall.\r\n4 bottles of beer on the wall, 4 bottles of beer.\r\nTake one down, pass it around, 3 bottles of beer on the wall.\r\n3 bottles of beer on the wall, 3 bottles of beer.\r\nTake one down, pass it around, 2 bottles of beer on the wall.\r\n2 bottles of beer on the wall, 2 bottles of beer.\r\nTake one down, pass it around, 1 bottle of beer on the wall.\r\n1 bottle of beer on the wall, 1 bottle of beer.\r\nTake one down, pass it around, 0 bottles of beer on the wall.\r\n")
+                 , ("fibonacci2", [], "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n10946\n17711\n28657\n46368\n75025\n121393\n196418\n317811\n514229\n832040\n1346269\n2178309\n3524578\n5702887\n9227465\n14930352\n24157817\n39088169\n63245986\n102334155\n165580141\n267914296\n433494437\n701408733\n")
+                 , ("fibonacci", [], "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n89\n144\n233\n377\n610\n987\n1597\n2584\n4181\n6765\n10946\n17711\n28657\n46368\n75025\n121393\n196418\n317811\n514229\n832040\n1346269\n2178309\n3524578\n5702887\n9227465\n14930352\n24157817\n39088169\n63245986\n102334155\n165580141\n267914296\n433494437\n701408733")
+                 , ("guess", toInts "=", "500?\r\n500\r\n")
+                 , ("guess", toInts ">><<>=", "500?\r\n750?\r\n875?\r\n812?\r\n781?\r\n796?\r\n796\r\n")
                  ]
 
 toInts = map f where
@@ -249,6 +253,11 @@ prop_roundtrip s = undefined
 -- TODO any literal constant can be pretty printed
 -- i.e. (Constant 7) pretty printed and parsed will not be (Constant 7) but
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
+prop_constant :: Value -> IO Bool
+prop_constant c = do
+  d <- pp (Constant c)
+  return $ P.parse expressionP "" (render d) == Right (Constant c)
+
 
 ------------- Arbitrary Instance -------------
 number :: [a] -> [(Int, a)]
