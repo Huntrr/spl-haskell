@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
+{-# LANGUAGE TupleSections      #-}
 
 module Tests where
 
@@ -12,12 +13,15 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        classify, elements, frequency, listOf,
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
-                                       stdArgs, (==>), choose, generate)
+                                       stdArgs, (==>), choose, generate,
+                                       sublistOf)
 
 import Data.Char (ord, chr)
 
 import           Data.Map             (Map)
 import qualified Data.Map             as Map
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
 import qualified Text.Megaparsec      as P
 import qualified Text.Megaparsec.Char as P
 
@@ -250,16 +254,19 @@ arbCname :: Gen CName
 arbCname = elements W.characters
 
 genSentence :: Int -> Gen Sentence
-genSentence n = frequency [
-    (n,  IfSo <$> genSentence n'),
-    (n,  IfNot <$> genSentence n'),
-    (10, elements [ OutputNumber, OutputCharacter, Pop ]),
-    (1, elements [ InputNumber, InputCharacter ]),
-    (5, Declaration <$> genExp n'),
-    (10, Push <$> arbitrary),
-    (5, Conditional <$> genComparison n'),
-    (n, GotoScene <$> choose (1, 5)),
-    (n, GotoAct <$> choose (1, 5))
+genSentence n = oneof [
+    pure OutputNumber,
+    pure OutputCharacter,
+    pure InputNumber,
+    pure InputCharacter,
+    Declaration <$> arbitrary,
+    Push <$> arbitrary,
+    pure Pop,
+    Conditional <$> arbitrary,
+    GotoScene <$> arbitrary,
+    GotoAct <$> arbitrary,
+    IfSo <$> genSentence n',
+    IfNot <$> genSentence n'
   ] where n' = n `div` 2
 
 genComparison :: Int -> Gen Comparison
@@ -315,6 +322,53 @@ instance Arbitrary Sentence where
   shrink (Conditional c) = [Conditional c' | c' <- shrink c]
   shrink _               = []
 
+-- generates a statement and new stage
+genStatement :: Set CName -> Int -> Gen (Set CName, [Statement])
+genStatement stage n
+  | ns == 0   = genEnter
+  | ns == 1   = frequency [(1, genExit), (3, genEnter)]
+  | otherwise = frequency [(1, genExit), (2, genEnter), (2, genLine)]
+    where n'      = n `div` 2
+          ns      = length stage
+          list    = Set.toList stage
+          genExit = do
+            cs <- take 2 <$> sublistOf list
+            return $ case cs of
+                       [c] -> (Set.delete c stage, [Exit c])
+                       _   -> (stage Set.\\ (Set.fromList cs), [Exeunt cs])
+          genEnter = do
+            cs <- Set.fromList <$> listOf arbCname
+            let cs'  = Set.take 2 $ cs Set.\\ stage
+             in return (cs', [Enter (Set.toList cs')])
+          genLine = do
+            speaker <- elements list
+            other   <- elements (Set.toList $ Set.delete speaker stage)
+            (stage', before, _) <- disambiguate speaker other
+            sentence <- genSentence n'
+            return (stage', before ++ [Line speaker sentence])
+          disambiguate c1 c2 = let set   = Set.fromList [c1, c2]
+                                   rest  = stage Set.\\ set
+                                   lrest = Set.toList rest
+                                in pure (set, Exit <$> lrest,
+                                        Enter . (:[]) <$> lrest)
+
+genBlock :: Int -> Gen Block
+genBlock n = do
+  stage <- Set.fromList . take 2 <$> listOf arbCname
+  block <- gen stage n
+  let first = (, blankAnnotation) <$> [Exeunt [], Enter (Set.toList stage)]
+   in return $ first ++ block
+  
+  where
+    gen stage n = frequency [
+        (1, pure []),
+        (n', do (stage', burst) <- genStatement stage n'
+                rest <- gen stage' n'
+                let this = (, blankAnnotation) <$> burst 
+                 in return $ this ++ rest
+        )
+      ] where n' = n `div` 2
+
 instance Arbitrary Statement where
   arbitrary = frequency [
       (12, Enter <$> listOf arbCname),
@@ -322,18 +376,19 @@ instance Arbitrary Statement where
       (1,  Exeunt <$> listOf arbCname),
       (10, Line <$> arbCname <*> sized genSentence)
     ]
-  shrink (Enter ns)  = [Enter n | n <- shrink ns]
-  shrink (Exeunt ns) = [Exeunt n | n <- shrink ns]
-  shrink (Exit n)    = []
-  shrink (Line n s)  = [Line n s' | s' <- shrink s]
+  shrink _ = []
+  -- shrink (Enter ns)  = [Enter n | n <- shrink ns]
+  -- shrink (Exeunt ns) = [Exeunt n | n <- shrink ns]
+  -- shrink (Exit n)    = []
+  -- shrink (Line n s)  = [Line n s' | s' <- shrink s]
 
 instance Arbitrary Annotation where
   arbitrary = elements [blankAnnotation]
   shrink a = [a]
 
 instance Arbitrary Scene where
-  arbitrary = Scene "" <$> arbitrary
-  shrink (Scene d b) = Scene d <$> [b' | b' <- shrink b]
+  arbitrary = Scene "" <$> sized genBlock
+  shrink (Scene d b) = Scene d <$> [take n b | n <- [1..(length b - 1)]]
 
 instance Arbitrary Act where
   arbitrary = Act "" <$> (Map.fromList . number <$> arbitrary)
