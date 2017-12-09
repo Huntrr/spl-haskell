@@ -2,7 +2,7 @@
     FlexibleInstances, ScopedTypeVariables #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
-module Evaluator (runIO, runInt, runString, runList, runFixed', runIO') where
+module Evaluator where
 
 import Data.Char (ord, chr)
 
@@ -89,7 +89,7 @@ evalComparison a speaker (Comparison r e1 e2) = do
   op Ge = (>=)
 
 evalSentence :: forall m.
-  (MonadCont m, MonadError Exception m, MonadState Store m) =>
+  (MonadError Exception m, MonadState Store m) =>
   (() -> m (Maybe Block))
   -> (Label -> m (Maybe Label))
   -> (Label -> m (Maybe Label))
@@ -186,7 +186,7 @@ getValue a c = do
     Nothing     -> return 0
     Just (v, _) -> return v
 
-decrTimer :: (MonadCont m, MonadState Store m, MonadError Exception m) =>
+decrTimer :: (MonadState Store m, MonadError Exception m) =>
   (() -> m (Maybe Block)) -> m ()
 decrTimer halt = do
   state <- get
@@ -202,7 +202,7 @@ decrTimer halt = do
 -- |                          BLOCK EVALUATORS                            | --
 ------------------------------------------------------------------------------
 evalStatement :: forall m.
-  (MonadCont m, MonadError Exception m, MonadState Store m) =>
+  (MonadError Exception m, MonadState Store m) =>
   (() -> m (Maybe Block))
   -> (Label -> m (Maybe Label))
   -> (Label -> m (Maybe Label))
@@ -236,7 +236,7 @@ evalStatement handleIO gotoAct gotoScene (s, a) = eval s where
       putCharSet $ Set.insert cname set
 
 executeBlock :: forall m.
-  (MonadState Store m, MonadCont m, MonadError Exception m) =>
+  (MonadState Store m, MonadError Exception m) =>
    Block
    -> (Maybe Block -> m (Maybe Block))
    -> (Maybe Label -> m (Maybe Label))
