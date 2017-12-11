@@ -461,7 +461,7 @@ genStatement stage n
           genEnter = do
             cs <- Set.fromList <$> listOf arbCname
             let cs'  = Set.take 2 $ cs Set.\\ stage
-             in return (Set.union cs' stage, [Enter (Set.toList cs')])
+             in if length cs' > 0 then return (Set.union cs' stage, [Enter (Set.toList cs')]) else return (stage, [])
           genLine = do
             speaker <- elements list
             other   <- elements (Set.toList $ Set.delete speaker stage)
@@ -503,11 +503,11 @@ instance Arbitrary Annotation where
   shrink a = [a]
 
 instance Arbitrary Scene where
-  arbitrary = Scene "SceneName" <$> sized genBlock
+  arbitrary = Scene "SceneName." <$> sized genBlock
   shrink (Scene d b) = Scene d <$> [take n b | n <- [1..(length b - 1)]]
 
 instance Arbitrary Act where
-  arbitrary = Act "ActName" <$> (Map.fromList . number <$> list)
+  arbitrary = Act "ActName." <$> (Map.fromList . number <$> list)
     where
       list = (:) <$> (arbitrary :: Gen Scene) <*> (arbitrary :: Gen [Scene])
   shrink (Act d sceneMap) =
@@ -516,8 +516,8 @@ instance Arbitrary Act where
      in Act d . Map.fromList . number <$> take (length list `div` 2) list'
 
 instance Arbitrary Program where
-  arbitrary = Program (Header "Much Ado about Monads"
-    ((\c -> Character c "a character") <$> chars)) <$>
+  arbitrary = Program (Header "Much Ado about Monads."
+    ((\c -> Character c "a character.") <$> chars)) <$>
       (Map.fromList . number <$> arbitrary)
   shrink (Program h actMap) =
     let list  = snd <$> Map.toList actMap
