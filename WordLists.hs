@@ -1,3 +1,5 @@
+module WordLists where
+
 firstPerson = ["I", "me"]
 
 firstPersonPossessive = ["mine", "my"]
@@ -17,6 +19,12 @@ characters = ["Achilles", "Adonis", "Adriana", "Aegeon", "Aemilia", "Agamemnon",
 negativeAdjectives = ["bad", "cowardly", "cursed", "damned", "dirty", "disgusting", "distasteful", "dusty", "evil", "fat", "fat-kidneyed", "fatherless", "foul", "hairy", "ugly", "half-witted", "horrible", "horrid", "infected", "lying", "miserable", "misused", "oozing", "rotten", "skilless", "smelly", "snotty", "sorry", "stinking", "stuffed", "stupid", "tame", "unpracticed", "vile", "villainous", "weak", "worried"]
 
 positiveAdjectives = ["amazing", "beautiful", "blossoming", "bold", "brave", "charming", "clearest", "cunning", "cute", "delicious", "nice", "embroidered", "fair", "fine", "gentle", "golden", "good", "handsome", "happy", "healthy", "honest", "lovely", "loving", "mighty", "noble", "peaceful", "pretty", "prompt", "proud", "reddest", "rich", "smooth", "sunny", "sweet", "sweetest", "trustworthy", "warm", "young"]
+
+adjectives = neutralAdjectives ++ negativeAdjectives ++ positiveAdjectives
+
+nouns = positiveNouns ++ negativeNouns ++ neutralNouns
+
+possesives = (++ "'s") <$> nouns
 
 negativeComparators = ["punier", "smaller", "worse", "uglier"]
 
