@@ -10,9 +10,11 @@ import Test.QuickCheck (generate,elements,vectorOf)
 import Control.Monad (liftM2,liftM3,foldM)
 import WordLists as W
 import Text.Numeral.Roman
+import Numeric
 import qualified Data.Char as Char
 import Data.Map as Map
 import qualified Data.List as List
+import Optimize
 
 {-- NOTE: in order to PrettyPrint an AST printed by the command
 `testParse $ "samples/__.spl"` we must:
@@ -116,8 +118,8 @@ goTo = do
   verb <- generate $ elements ["return to", "proceed to"]
   return $ PP.text pronoun PP.<+> PP.text verb
 
-generateConstant :: Int -> IO Doc
-generateConstant n = do
+generatePowerOf2 :: Int -> IO Doc
+generatePowerOf2 n = do
   adjs <- generate $ vectorOf (floor $ logBase 2 (abs (fromIntegral n)) :: Int) 
                               (elements W.adjectives)
   noun <- if n > 0 then generate $ elements W.positiveNouns else
@@ -127,6 +129,42 @@ generateConstant n = do
                        isVowel (head $ head adjs) 
                         then "an" else "a") PP.<+> -- TODO: consider case with only noun
     PP.hsep (PP.text <$> adjs) PP.<+> PP.text noun
+
+convertIntToBinaryExp :: Int -> Expression
+convertIntToBinaryExp n = if n /= 0 then
+    convertPowersToExp $ convertNonZeroIntToPowersOf2 n
+  else
+    Constant 0
+
+convertNonZeroIntToPowersOf2 :: Int -> [Int]
+convertNonZeroIntToPowersOf2 n = let 
+  bools = convertPositiveIntToBinary (abs n)
+  ints = convertBoolListToPowers bools in
+    if n < 0 then List.map (*(-1)) ints else ints
+
+
+convertPositiveIntToBinary :: Int -> [Bool]
+convertPositiveIntToBinary n = case (n > 0) of
+  True -> let ints = showIntAtBase 2 Char.intToDigit n "" in
+            reverse [if c == '1' then True else False | c <- ints]
+  False -> [False]
+
+convertBoolListToPowers :: [Bool] -> [Int]
+convertBoolListToPowers l = List.filter (>0)
+    (convertPairs $ convertWithIndex (l, 0)) where
+      convertPairs = List.map (\(b, power) -> mult b power)
+      mult b power = if b then 2^power else 0
+      convertWithIndex ((h:t), n) = (h, n) : convertWithIndex (t, n+1)
+      convertWithIndex ([], _) = []
+
+
+convertPowersToExp :: [Int] -> Expression
+convertPowersToExp l = let exps = fmap Constant l in
+  case l of
+    [] -> Constant 0
+    _ -> List.foldr1 Sum exps
+
+
 
 {-- TODO: generate arbitrary constants that aren't powers of 2 --}
 
@@ -182,14 +220,13 @@ instance PP Statement where
                                    (pp $ capName name) (pp sentence) (punctuation sentence)
 
 instance PP (Statement, Annotation) where
-  pp (s, _) = pp s
-{--  pp (s, Annotation "" _) = pp s
+  pp (s, Annotation "" _) = pp s
   pp (Enter _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
   pp (Exeunt _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
   pp (Exit _, Annotation a _) = return $ PP.lbrack PP.<> PP.text a PP.<> PP.rbrack PP.<> newline
   pp (Line name sentence, Annotation a _) = liftM2 (\n p -> n PP.<> PP.colon PP.$$ PP.space PP.<> 
                                                 PP.text a PP.<> p PP.<> newline)
-                                      (return $ PP.text $ capName name) (punctuation sentence) --}
+                                      (return $ PP.text $ capName name) (punctuation sentence)
 
 instance PP Sentence where
   pp (IfSo s) = (\ x -> PP.text "If so," PP.<+> x) <$> pp s
@@ -223,7 +260,10 @@ instance PP Reference where
 
 instance PP Expression where
   pp (Constant 0) = return $ PP.text "nothing"
-  pp (Constant v) = generateConstant v
+  pp (Constant v) = if convertIntToBinaryExp v == Constant v then
+      generatePowerOf2 v
+    else
+      pp $ convertIntToBinaryExp v
   pp (Sum e1 e2) = liftM2 (\x y -> PP.text "the sum of" PP.<+> x PP.<+> PP.text "and" PP.<+> y)
                           (pp e1)
                           (pp e2)
