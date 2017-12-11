@@ -165,9 +165,6 @@ convertPowersToExp l = let exps = fmap Constant l in
     _ -> List.foldr1 Sum exps
 
 
-
-{-- TODO: generate arbitrary constants that aren't powers of 2 --}
-
 negativeCompare :: IO Doc
 negativeCompare = do
   negComp <- generate $ elements W.negativeComparators
