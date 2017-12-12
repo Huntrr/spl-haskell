@@ -82,7 +82,7 @@ parseFile file = do
                   s <- readFile file
                   case P.parse programP file s of
                     Left err -> error (P.parseErrorPretty' s err)
-                    Right p -> return p
+                    Right p  -> return p
 
 programP :: Parser Program
 programP = liftA2 Program headerP (Map.fromList <$> many actP) <* P.eof
@@ -368,7 +368,7 @@ binOp :: (Expression -> Expression -> Expression) -> String -> String ->
          Parser Expression
 binOp con word prep =
   liftA2 con
-  (P.string' "the" *> P.space1 *> P.string' word *> P.space1 *> P.string' prep
+  (optional (P.string' "the" *> P.space1) *> P.string' word *> P.space1 *> P.string' prep
   *> P.space *> expressionP) (P.string' "and" *> P.space1 *> expressionP)
 
 sumP :: Parser Expression

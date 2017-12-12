@@ -16,6 +16,7 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>), choose, generate,
                                        sublistOf, Property, maxDiscardRatio)
+import           Test.QuickCheck.Monadic as QuickCheckM
 
 import Debug.Trace
 import Data.Char (ord, chr)
@@ -32,6 +33,7 @@ import           Data.Either.Extra
 import           Evaluator
 import           LanguageParser
 import           PrettyPrinter
+import           Optimize
 import           Main
 import qualified WordLists            as W
 import Text.PrettyPrint (render)
@@ -47,7 +49,7 @@ main = do
                              testParseExpression, testParseComparison,
                              testParseSentence, testEvaluator])
    putStrLn "Testing Roundtrip property..."
-   quickCheckN 500 prop_roundtrip
+   quickCheckN 100 prop_roundtrip
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
@@ -464,7 +466,7 @@ isIO (Line _ s) = f s where
   f (IfNot s)       = f s
   f _               = False
 isIO _ = False 
-blockHasIO b = any isIO b
+blockHasIO = any isIO
 
 isJumpScene (Line _ s) = f s where
   f (GotoScene _)   = True
@@ -472,7 +474,7 @@ isJumpScene (Line _ s) = f s where
   f (IfNot s)       = f s
   f _               = False
 isJumpScene _ = False 
-blockHasJumpScene b = any isJumpScene b
+blockHasJumpScene = any isJumpScene
 
 isJumpAct (Line _ s) = f s where
   f (GotoAct _)     = True
@@ -480,7 +482,7 @@ isJumpAct (Line _ s) = f s where
   f (IfNot s)       = f s
   f _               = False
 isJumpAct _ = False 
-blockHasJumpAct b = any isJumpAct b
+blockHasJumpAct = any isJumpAct
 
 -- if a block blocks, it should have the corresponding type of block in its
 -- body
@@ -500,8 +502,20 @@ prop_block_act s b = let t  = testBlock s b
   t JumpAct ==> blockHasJumpAct l
 
 ------------- Roundtrip property -------------
-prop_roundtrip :: Program -> Bool
-prop_roundtrip s = undefined
+do_roundtrip :: Program -> IO Program
+do_roundtrip prog = do
+  doc <- pp prog
+  prog' <- let s = render doc in
+              case P.parse programP "" s of
+                    Left err -> error (P.parseErrorPretty' s err)
+                    Right p -> return p
+  return $ optimizer prog'
+
+prop_roundtrip :: Program -> Property
+prop_roundtrip prog = monadicIO $ do
+  prog' <- QuickCheckM.run (do_roundtrip prog)
+  QuickCheckM.assert (optimizer prog == prog')
+
 -- ^^ TODO THIS WON'T WORK
 -- (Constant 7
 --       => "the sum of a large angry red king and a rat"
@@ -545,7 +559,7 @@ instance Arbitrary QCName where
 number :: [a] -> [(Int, a)]
 number = zip [1..]
 
-chars = ["Romeo", "Juliet", "Hamlet", "Ophelia", "Othello", "Puck", "The Ghost"]
+chars = ["romeo", "juliet", "hamlet", "ophelia", "othello", "puck", "the ghost"]
 arbCname :: Gen CName
 arbCname = elements chars
 
