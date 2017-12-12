@@ -15,8 +15,10 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>), choose, generate, 
-                                       sublistOf, Property, maxDiscardRatio)
+                                       sublistOf, Property, maxDiscardRatio, 
+                                       infiniteListOf)
 import           Test.QuickCheck.Monadic as QuickCheckM
+
 import Debug.Trace
 import Data.Char (ord, chr)
 
@@ -34,6 +36,7 @@ import           LanguageParser
 import           PrettyPrinter
 import           Optimize
 import           Main
+import           Stepper
 import qualified WordLists            as W
 import Text.PrettyPrint (render)
 
@@ -50,6 +53,8 @@ main = do
    putStrLn "Testing Roundtrip property..."
    quickCheckS 100 prop_roundtrip
    quickCheckN 100 prop_constant
+   quickcheck_evaluator
+   quickCheckS 15 prop_roundtrip_step
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
@@ -128,7 +133,6 @@ testParseExpression =
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant (-4)))) (Cube (Constant (-4)))),
       P.parse expressionP "" "Juliet" ~?= Right (Var (They "juliet")),
-      -- TODO: multi-word variables don't work yet
       P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the ghost"))),
       P.parse expressionP "" "the product of Juliet and a Pig"
         ~?= Right (Product (Var (They "juliet")) (Constant (-1))),
@@ -209,8 +213,6 @@ testParseSentence =
       parseUnwrap "You are a good fat-kidneyed trustworthy blister."
         ~?= Declaration (Constant (-8))
     ]
-
--- TODO: PRETTY PRINTER
 
 
 ------------ EVALUATOR ----------------------
@@ -469,7 +471,7 @@ isIO (Line _ s) = f s where
   f (IfNot s)       = f s
   f _               = False
 isIO _ = False 
-blockHasIO b = any isIO b
+blockHasIO = any isIO
 
 isJumpScene (Line _ s) = f s where
   f (GotoScene _)   = True
@@ -477,7 +479,7 @@ isJumpScene (Line _ s) = f s where
   f (IfNot s)       = f s
   f _               = False
 isJumpScene _ = False 
-blockHasJumpScene b = any isJumpScene b
+blockHasJumpScene = any isJumpScene
 
 isJumpAct (Line _ s) = f s where
   f (GotoAct _)     = True
@@ -485,7 +487,7 @@ isJumpAct (Line _ s) = f s where
   f (IfNot s)       = f s
   f _               = False
 isJumpAct _ = False 
-blockHasJumpAct b = any isJumpAct b
+blockHasJumpAct = any isJumpAct
 
 -- if a block blocks, it should have the corresponding type of block in its
 -- body
@@ -519,13 +521,14 @@ prop_roundtrip prog = monadicIO $ do
   prog' <- QuickCheckM.run (do_roundtrip prog)
   QuickCheckM.assert (optimizer prog == prog')
 
--- ^^ TODO THIS WON'T WORK
--- (Constant 7
---       => "the sum of a large angry red king and a rat"
---       => Sum (Constant 8) (Constant (-1)))
--- Could check bounded program equivalency instead?
-
--- TODO program equivalency with N steps (using stepper)
+-- program equivalency with N steps (using stepper)
+prop_roundtrip_step :: Program -> QCInput -> Property
+prop_roundtrip_step prog qinput = let QCInput input = qinput in monadicIO $ do
+  prog' <- QuickCheckM.run (do_roundtrip prog)
+  let o1 = runFixedSteps prog 1500 input
+      o2 = runFixedSteps prog' 1500 input
+   in do QuickCheckM.pre $ (isLeft o1) && (isLeft o2)
+         QuickCheckM.assert (o1 == o2)
 
 -- i.e. (Constant 7) pretty printed and parsed will not be (Constant 7) but
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
@@ -539,7 +542,7 @@ do_constant c = do
 prop_constant :: Value -> Property
 prop_constant c = monadicIO $ do
   b <- QuickCheckM.run (do_constant c)
-  QuickCheckM.assert (b)
+  QuickCheckM.assert b
 
 
 ------------- Arbitrary Instance -------------
@@ -554,6 +557,14 @@ instance Arbitrary Store where
                     <*> (choose (1,6))
                     <*> (choose (1,6))
                     <*> (pure Nothing)
+  shrink _ = []
+
+data QCInput = QCInput [Int]
+instance Show QCInput where
+  show (QCInput l) = show l
+
+instance Arbitrary QCInput where
+  arbitrary = QCInput <$> infiniteListOf arbitrary
   shrink _ = []
 
 ------------- ARBITRARY PROGRAM --------------
