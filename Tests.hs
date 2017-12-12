@@ -126,7 +126,6 @@ testParseExpression =
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant (-4)))) (Cube (Constant (-4)))),
       P.parse expressionP "" "Juliet" ~?= Right (Var (They "juliet")),
-      -- TODO: multi-word variables don't work yet
       P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the ghost"))),
       P.parse expressionP "" "the product of Juliet and a Pig"
         ~?= Right (Product (Var (They "juliet")) (Constant (-1))),
@@ -207,8 +206,6 @@ testParseSentence =
       parseUnwrap "You are a good fat-kidneyed trustworthy blister."
         ~?= Declaration (Constant (-8))
     ]
-
--- TODO: PRETTY PRINTER
 
 
 ------------ EVALUATOR ----------------------
