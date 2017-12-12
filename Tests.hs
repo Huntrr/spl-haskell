@@ -46,7 +46,7 @@ main :: IO ()
 main = do
    _ <- runTestTT (TestList [testParseHeader, testParseConstant,
                              testParseExpression, testParseComparison,
-                             testParseSentence])
+                             testParseSentence, testEvaluator])
    putStrLn "Testing Roundtrip property..."
    quickCheckN 100 prop_roundtrip
    return ()
@@ -72,9 +72,6 @@ outputs p i o = p ~: TestCase $ do
 
 
 ------------ HUnit Tests ---------------------
--- TODO: PARSER
--- Unknown vocabulary
-
 helloWorldHeader = Header
                    "The Infamous Hello World Program."
                    [
@@ -212,8 +209,8 @@ testParseSentence =
 
 
 ------------ EVALUATOR ----------------------
-evaluatorTests :: Test
-evaluatorTests = TestList [
+testEvaluator :: Test
+testEvaluator = TestList [
     sampleTest,
     expTests,
     refTests,
@@ -232,8 +229,14 @@ samplePrograms = [ ("hello", [], "Hello World!\n")
                  , ("bubble-sort", toInts "97531", "13579")
                  , ("bubble-sort", toInts "20452", "02245")
                  , ("bubble-sort", toInts "11110", "01111")
-                 -- , ("stack-sort", [-1], "")
-                 -- , ("stack-sort", [1, -1], "1")
+                 , ("stack-sort", [-1], "")
+                 , ("stack-sort", [1, -1], "1\n")
+                 , ("stack-sort", [1, 2, 3, 4, 5, -1], "1\n2\n3\n4\n5\n")
+                 , ("stack-sort", [9, 7, 5, 3, 1, -1], "1\n3\n5\n7\n9\n")
+                 , ("stack-sort", [2, 0, 4, 5, 2, -1], "0\n2\n2\n4\n5\n")
+                 , ("stack-sort", [1, 1, 1, 1, 0, -1], "0\n1\n1\n1\n1\n")
+                 , ("stack-sort", [500, 124, 306, 42, 10, -1],
+                    "10\n42\n124\n306\n500\n")
                  ]
 
 toInts = map f where
@@ -324,12 +327,125 @@ compTests = TestList [
     compIs expState "C" (Comparison E (Var Me) (Var Me)) True
   ]
 
+-- helepr function for testing sentences and blocks
+data Outcome = BlockIO | JumpScene | JumpAct | CompleteState (Store -> Bool) |
+               FailError Exception
+
+instance Eq Outcome where
+  BlockIO == BlockIO = True
+  JumpScene == JumpScene = True
+  JumpAct == JumpAct = True
+  _ == _ = False
+
+testBlock :: Store -> Block -> Outcome -> Bool
+testBlock st b outcome =
+  (runCont (runExceptT (fst <$> runStateT cont st)) f) where
+    f (Left e)  = case outcome of
+                    FailError e' -> e == e'
+                    _            -> False
+    f (Right v) = v
+    cont =
+      callCC $ \resolve -> do
+        r1 <- callCC $ \blockIO -> do
+          r2 <- callCC $ \jumpAct -> do
+            r3 <- callCC $ \jumpScene -> do
+              executeBlock b blockIO jumpAct Nothing jumpScene
+              case outcome of
+                CompleteState f -> do
+                  s <- get
+                  resolve (f s)
+                  return Nothing
+                _ -> return Nothing
+            case r3 of
+              Nothing -> return Nothing
+              Just _ -> resolve (outcome == JumpScene) >> return Nothing
+          case r2 of
+            Nothing -> return Nothing
+            Just _ -> resolve (outcome == JumpAct) >> return Nothing
+        case r1 of
+          Nothing -> return False
+          Just _ -> resolve (outcome == BlockIO) >> return False
+
+testSentence :: CName -> Store -> Sentence -> Outcome -> Bool
+testSentence cn st s outcome =
+  (runCont (runExceptT (fst <$> runStateT cont st)) f) where
+    f (Left e)  = case outcome of
+                    FailError e' -> e == e'
+                    _            -> False
+    f (Right v) = v
+    cont =
+      callCC $ \resolve -> do
+        r1 <- callCC $ \blockIO -> do
+          r2 <- callCC $ \jumpAct -> do
+            r3 <- callCC $ \jumpScene -> do
+              evalSentence blockIO jumpAct jumpScene blankAnnotation cn s
+              s <- get
+              case outcome of
+                CompleteState f -> resolve (f s) >> return (-1)
+                _ -> return (-1)
+            case r3 of
+              (-1) -> resolve False >> return (-1)
+              _    -> resolve (outcome == JumpScene) >> return (-1)
+          case r2 of
+            (-1) -> return ()
+            _ -> resolve (outcome == JumpAct) >> return ()
+        resolve (outcome == BlockIO) >> return False
+
+-- quickchecks
+quickcheck_evaluator :: IO ()
+quickcheck_evaluator = do
+  quickCheckN 500 prop_sentence_decl
+  quickCheckN 500 prop_sentence_decl2
+  quickCheckN 500 prop_sentence_conditional
+  quickCheckN 500 prop_sentence_push_pop
+
 -- evalSentence
 -- after a decl, if that expression evaluates, char has that value
+prop_sentence_decl :: Expression -> Store -> QCName -> QCName -> Property
+prop_sentence_decl e s qn qo = let QCName n = qn
+                                   QCName o = qo
+                                   s' = s { onStage = Set.fromList [n, o] }
+                                   v  = fst $ withState s' (evalExpression
+                                                            blankAnnotation n e)
+                                   f st = case Map.lookup o (variables st) of
+                                            Nothing -> False
+                                            Just (v', _) -> Right v' == v
+  in n /= o  && isRight v ==>
+    testSentence n s' (Declaration e) (CompleteState f)
 
--- a pop then a push always yields same constant
+prop_sentence_decl2 :: Expression -> Store -> QCName -> QCName -> Property
+prop_sentence_decl2 e s qn qo = let QCName n = qn
+                                    QCName o = qo
+                                    s' =
+                                      s { onStage = (Set.insert n (onStage s)) }
+  in n /= o && length (onStage s') > 2  ==>
+    testSentence n s' (Declaration e)
+      (FailError $ AmbiguousYou blankAnnotation Set.empty)
 
 -- conditional sets conditional appropriately
+prop_sentence_conditional :: Comparison -> Store -> QCName -> Property
+prop_sentence_conditional c s qn = let
+    QCName n = qn
+    s'       = s { onStage = Set.insert n (onStage s) }
+    v  = fst $ withState s' (evalComparison blankAnnotation n c)
+    f st     = Right (condition st) == (Just <$> v)
+ in isRight v ==> testSentence n s' (Conditional c) (CompleteState f)
+  
+
+-- a pop then a push always yields same constant
+prop_sentence_push_pop :: Reference -> Store -> QCName -> QCName -> Property
+prop_sentence_push_pop r s qn qo = let
+    QCName n = qn
+    QCName o = qo
+    s' = s { onStage = Set.fromList [n, o] }
+    v  = fst $ withState s' (evalExpression blankAnnotation n (Var r))
+    f st = case Map.lookup o (variables st) of
+             Just (_, v':_) -> Right v' == v
+             _              -> False
+  in n /= o  && isRight v ==>
+    testSentence n s' (Push r) (CompleteState f)
+
+
 
 -- executeBlock
 -- if a block finishes without IO or GOTO it goes to the next scene
@@ -381,6 +497,29 @@ prop_constant c = do
 
 
 ------------- Arbitrary Instance -------------
+-- first a simple arbitrary for store
+instance Arbitrary Store where
+  arbitrary = Store <$> (Map.fromList <$>
+                          (zip <$> (sublistOf chars) <*> arbitrary))
+                    <*> (Set.fromList <$> (sublistOf chars))
+                    <*> arbitrary
+                    <*> (pure Nothing)
+                    <*> (pure Nothing)
+                    <*> (choose (1,6))
+                    <*> (choose (1,6))
+                    <*> (pure Nothing)
+  shrink _ = []
+
+------------- ARBITRARY PROGRAM --------------
+
+data QCName = QCName String
+instance Show QCName where
+  show (QCName s) = show s
+
+instance Arbitrary QCName where
+  arbitrary = QCName <$> arbCname
+  shrink (QCName _) = []
+
 number :: [a] -> [(Int, a)]
 number = zip [1..]
 
