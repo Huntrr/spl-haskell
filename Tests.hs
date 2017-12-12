@@ -15,7 +15,8 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>), choose, generate,
-                                       sublistOf, Property, maxDiscardRatio)
+                                       sublistOf, Property, maxDiscardRatio,
+                                       infiniteListOf)
 import           Test.QuickCheck.Monadic as QuickCheckM
 
 import Debug.Trace
@@ -35,6 +36,7 @@ import           LanguageParser
 import           PrettyPrinter
 import           Optimize
 import           Main
+import           Stepper
 import qualified WordLists            as W
 import Text.PrettyPrint (render)
 
@@ -50,6 +52,8 @@ main = do
                              testParseSentence, testEvaluator])
    putStrLn "Testing Roundtrip property..."
    quickCheckN 100 prop_roundtrip
+   quickcheck_evaluator
+   quickCheckS 15 prop_roundtrip_step
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
@@ -516,13 +520,14 @@ prop_roundtrip prog = monadicIO $ do
   prog' <- QuickCheckM.run (do_roundtrip prog)
   QuickCheckM.assert (optimizer prog == prog')
 
--- ^^ TODO THIS WON'T WORK
--- (Constant 7
---       => "the sum of a large angry red king and a rat"
---       => Sum (Constant 8) (Constant (-1)))
--- Could check bounded program equivalency instead?
-
--- TODO program equivalency with N steps (using stepper)
+-- program equivalency with N steps (using stepper)
+prop_roundtrip_step :: Program -> QCInput -> Property
+prop_roundtrip_step prog qinput = let QCInput input = qinput in monadicIO $ do
+  prog' <- QuickCheckM.run (do_roundtrip prog)
+  let o1 = runFixedSteps prog 1500 input
+      o2 = runFixedSteps prog' 1500 input
+   in do QuickCheckM.pre $ (isLeft o1) && (isLeft o2)
+         QuickCheckM.assert (o1 == o2)
 
 -- i.e. (Constant 7) pretty printed and parsed will not be (Constant 7) but
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
@@ -544,6 +549,14 @@ instance Arbitrary Store where
                     <*> (choose (1,6))
                     <*> (choose (1,6))
                     <*> (pure Nothing)
+  shrink _ = []
+
+data QCInput = QCInput [Int]
+instance Show QCInput where
+  show (QCInput l) = show l
+
+instance Arbitrary QCInput where
+  arbitrary = QCInput <$> infiniteListOf arbitrary
   shrink _ = []
 
 ------------- ARBITRARY PROGRAM --------------
