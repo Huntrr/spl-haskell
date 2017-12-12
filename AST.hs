@@ -60,7 +60,7 @@ instance Eq Exception where
   OutOfSteps _ _ == OutOfSteps _ _ = True
   InvalidAct _ == InvalidAct _ = True
   InvalidScene _ == InvalidScene _ = True
-  _ == _ = True
+  _ == _ = False
 
 data Annotation = Annotation String SourcePos deriving (Eq, Show)
 blankAnnotation = Annotation "" (initialPos "")
