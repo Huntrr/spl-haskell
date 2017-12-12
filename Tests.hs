@@ -15,7 +15,7 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>), choose, generate,
-                                       sublistOf, Property)
+                                       sublistOf, Property, maxDiscardRatio)
 
 import Debug.Trace
 import Data.Char (ord, chr)
@@ -52,6 +52,10 @@ main = do
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
 quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100 }
+
+quickCheckL n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100
+                                           , maxDiscardRatio = n * 10 }
+quickCheckS n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 15 }
 
 file f = "samples/" ++ f ++ ".spl"
 
@@ -390,13 +394,20 @@ testSentence cn st s outcome =
             _ -> resolve (outcome == JumpAct) >> return ()
         resolve (outcome == BlockIO) >> return False
 
--- quickchecks
+
+
+
+
+------------- QUICKCHECK --------------------
 quickcheck_evaluator :: IO ()
 quickcheck_evaluator = do
   quickCheckN 500 prop_sentence_decl
   quickCheckN 500 prop_sentence_decl2
   quickCheckN 500 prop_sentence_conditional
   quickCheckN 500 prop_sentence_push_pop
+  quickCheckL 250 prop_block_io
+  quickCheckL 250 prop_block_scene
+  quickCheckL 250 prop_block_act
 
 -- evalSentence
 -- after a decl, if that expression evaluates, char has that value
@@ -447,16 +458,50 @@ prop_sentence_push_pop r s qn qo = let
 
 
 -- executeBlock
--- if a block finishes without IO or GOTO it goes to the next scene
+isIO (Line _ s) = f s where
+  f OutputNumber    = True
+  f OutputCharacter = True
+  f InputNumber     = True
+  f InputCharacter  = True
+  f (IfSo s)        = f s
+  f (IfNot s)       = f s
+  f _               = False
+isIO _ = False 
+blockHasIO b = any isIO b
 
+isJumpScene (Line _ s) = f s where
+  f (GotoScene _)   = True
+  f (IfSo s)        = f s
+  f (IfNot s)       = f s
+  f _               = False
+isJumpScene _ = False 
+blockHasJumpScene b = any isJumpScene b
 
--- if a block calls IO then it has input or output
+isJumpAct (Line _ s) = f s where
+  f (GotoAct _)     = True
+  f (IfSo s)        = f s
+  f (IfNot s)       = f s
+  f _               = False
+isJumpAct _ = False 
+blockHasJumpAct b = any isJumpAct b
 
--- if a block calls gotoScene it has gotoScene
+-- if a block blocks, it should have the corresponding type of block in its
+-- body
+prop_block_io :: Store -> Block -> Property
+prop_block_io s b = let t  = testBlock s b
+                        l  = fst <$> b in
+  t BlockIO ==> blockHasIO l
 
--- if a block calls gotoAct then it has gotoAct
+prop_block_scene :: Store -> Block -> Property
+prop_block_scene s b = let t  = testBlock s b
+                           l  = fst <$> b in
+  t JumpScene ==> blockHasJumpScene l
 
-------------- QUICKCHECK --------------------
+prop_block_act :: Store -> Block -> Property
+prop_block_act s b = let t  = testBlock s b
+                         l  = fst <$> b in
+  t JumpAct ==> blockHasJumpAct l
+
 ------------- Roundtrip property -------------
 prop_roundtrip :: Program -> Bool
 prop_roundtrip s = undefined
@@ -468,13 +513,6 @@ prop_roundtrip s = undefined
 
 -- TODO program equivalency with N steps (using stepper)
 
--- TODO optimizers don't change programs (check bounded computatioN)
--- check for sound/correct optimizations
-
--- TODO optimizers make ASTs smaller
--- Could we also profile evaluations to see if optimizers make programs faster?
-
--- TODO any literal constant can be pretty printed
 -- i.e. (Constant 7) pretty printed and parsed will not be (Constant 7) but
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
 prop_constant :: Value -> IO Bool
