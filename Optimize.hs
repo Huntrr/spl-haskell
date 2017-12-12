@@ -56,7 +56,7 @@ optExpression (Product e1 e2) = case (optExpression e1, optExpression e2) of
   (e1', Constant 1) -> e1'
   (e1', e2') -> Product e1' e2'
 optExpression (Quotient e1 e2) = case (optExpression e1, optExpression e2) of
-  (Constant c1, Constant c2) -> Constant (c1 `div` c2)
+  (Constant c1, Constant c2) -> Constant (if c2 == 0 then 0 else c1 `div` c2)
   (e1', Constant 1) -> e1'
   (e1', e2') -> Quotient e1' e2'
 optExpression (Square e) = case optExpression e of
@@ -72,7 +72,7 @@ optExpression (Twice e) = case optExpression e of
   Constant e' -> Constant (2 * e')
   eOpt -> Twice eOpt
 optExpression (Mod e1 e2) = case (optExpression e1, optExpression e2) of
-  (Constant c1, Constant c2) -> Constant (c1 `mod` c2)
+  (Constant c1, Constant c2) -> Constant (if c2 == 0 then 0 else c1 `mod` c2)
   (e1', e2') -> Mod e1' e2'
 optExpression e@(Var v) = e
 
