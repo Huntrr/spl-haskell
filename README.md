@@ -14,7 +14,7 @@ specified.
 ## Authors
 Ben Sandler - sandlerb
 Hunter Lightman - hunterl
-Kasra Koushan koushan
+Kasra Koushan - koushan
 
 
 ## Modules (in approximate order for you to read it in):
