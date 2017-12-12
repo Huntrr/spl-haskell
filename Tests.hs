@@ -14,12 +14,9 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        classify, elements, frequency, listOf,
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
-                                       stdArgs, (==>), choose, generate,
-                                       sublistOf, Property)
-import           Test.QuickCheck.Monadic as QuickCheckM
+                                       stdArgs, (==>), choose, generate, 
                                        sublistOf, Property, maxDiscardRatio)
-
->>>>>>> hunter-quickcheck
+import           Test.QuickCheck.Monadic as QuickCheckM
 import Debug.Trace
 import Data.Char (ord, chr)
 
@@ -51,7 +48,7 @@ main = do
                              testParseExpression, testParseComparison,
                              testParseSentence, testEvaluator])
    putStrLn "Testing Roundtrip property..."
-   quickCheckN 100 prop_roundtrip
+   quickCheckS 100 prop_roundtrip
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
