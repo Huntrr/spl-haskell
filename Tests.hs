@@ -49,6 +49,7 @@ main = do
                              testParseSentence, testEvaluator])
    putStrLn "Testing Roundtrip property..."
    quickCheckS 100 prop_roundtrip
+   quickCheckN 100 prop_constant
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
@@ -528,10 +529,17 @@ prop_roundtrip prog = monadicIO $ do
 
 -- i.e. (Constant 7) pretty printed and parsed will not be (Constant 7) but
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
-prop_constant :: Value -> IO Bool
-prop_constant c = do
+do_constant :: Value -> IO Bool
+do_constant c = do
   d <- pp (Constant c)
-  return $ P.parse expressionP "" (render d) == Right (Constant c)
+  return $ (case P.parse expressionP "" (render d) of
+    Left err -> Left err
+    Right expr -> Right (optimizer expr)) == Right (Constant c)
+
+prop_constant :: Value -> Property
+prop_constant c = monadicIO $ do
+  b <- QuickCheckM.run (do_constant c)
+  QuickCheckM.assert (b)
 
 
 ------------- Arbitrary Instance -------------
