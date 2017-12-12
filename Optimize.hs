@@ -29,7 +29,11 @@ instance Optimizable (Statement, Annotation) where
   optimizer (statement, annotation) = (statement, annotation) -- TODO: use blankAnnotation?
 
 instance Optimizable Sentence where
+  optimizer (IfSo s) = IfSo (optimizer s)
+  optimizer (IfNot s) = IfNot (optimizer s)
   optimizer (Declaration e) = Declaration (optimizer e)
+  optimizer (Conditional (Comparison r e1 e2)) =
+    Conditional (Comparison r (optimizer e1) (optimizer e2))
   optimizer sentence = sentence
 
 -- simplifies expression in a program to reduce unnecessary computation

@@ -72,7 +72,10 @@ data Program = Program Header (Map.Map Label Act) deriving (Eq, Show)
 data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
 type Block = [(Statement, Annotation)]
-data Scene = Scene Description Block deriving (Eq, Show)
+data Scene = Scene Description Block deriving (Show)
+
+instance Eq Scene where
+  (Scene d1 b1) == (Scene d2 b2) = (d1 == d2) && (fmap fst b1 == fmap fst b2)
 
 data Statement = Enter [CName]  |
                  Exit CName     |

@@ -15,8 +15,8 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>), choose, generate,
-                                       sublistOf)
-
+                                       sublistOf, Property)
+import           Test.QuickCheck.Monadic as QuickCheckM
 import Debug.Trace
 import Data.Char (ord, chr)
 
@@ -32,6 +32,7 @@ import           Data.Either.Extra
 import           Evaluator
 import           LanguageParser
 import           PrettyPrinter
+import           Optimize
 import           Main
 import qualified WordLists            as W
 import Text.PrettyPrint (render)
@@ -47,7 +48,7 @@ main = do
                              testParseExpression, testParseComparison,
                              testParseSentence])
    putStrLn "Testing Roundtrip property..."
-   quickCheckN 500 prop_roundtrip
+   quickCheckN 100 prop_roundtrip
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
@@ -342,8 +343,20 @@ compTests = TestList [
 
 ------------- QUICKCHECK --------------------
 ------------- Roundtrip property -------------
-prop_roundtrip :: Program -> Bool
-prop_roundtrip s = undefined
+do_roundtrip :: Program -> IO Program
+do_roundtrip prog = do
+  doc <- pp prog
+  prog' <- let s = render doc in
+              case P.parse programP "" s of
+                    Left err -> error (P.parseErrorPretty' s err)
+                    Right p -> return p
+  return $ optimizer prog'
+
+prop_roundtrip :: Program -> Property
+prop_roundtrip prog = monadicIO $ do
+  prog' <- QuickCheckM.run (do_roundtrip prog)
+  QuickCheckM.assert (optimizer prog == prog')
+
 -- ^^ TODO THIS WON'T WORK
 -- (Constant 7
 --       => "the sum of a large angry red king and a rat"
@@ -371,7 +384,7 @@ prop_constant c = do
 number :: [a] -> [(Int, a)]
 number = zip [1..]
 
-chars = ["Romeo", "Juliet", "Hamlet", "Ophelia", "Othello", "Puck", "The Ghost"]
+chars = ["romeo", "juliet", "hamlet", "ophelia", "othello", "puck", "the ghost"]
 arbCname :: Gen CName
 arbCname = elements chars
 
