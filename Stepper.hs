@@ -7,21 +7,11 @@ module Stepper where
 import Control.Monad.State (MonadState(..), StateT, State, runState, runStateT)
 import Control.Monad.Except (MonadError(..), ExceptT, runExceptT)
 
-import Evaluator
+import Evaluator (runIO', runFixed')
 import AST
 
--- TODO: Aux functions here will come after figuring out Evaluator
+runIOSteps :: Program -> Int -> IO ()
+runIOSteps p n = runIO' p (Just n)
 
-stepper :: Program -> IO ()
-stepper = undefined
-
-step :: (MonadError Exception m, MonadState Store m) => Scene -> m Scene
-step = undefined
-
-executeStep :: (MonadError Exception m, MonadState Store m) =>
-  Program -> Store -> m Store
-executeStep = undefined
-
-boundedStep :: (MonadError Exception m, MonadState Store m) =>
-  Int -> Program -> Store -> m Scene
-boundedStep = undefined
+runFixedSteps :: Program -> Int -> [Int] -> Either String Exception
+runFixedSteps p n = runFixed' p (Just n)
