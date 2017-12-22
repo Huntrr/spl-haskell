@@ -6,8 +6,27 @@
 
 module AST where
 
-import qualified Data.Map.Lazy   as Map
-import           Text.Megaparsec (SourcePos)
+import Data.Map (Map)
+import qualified Data.Map.Lazy as Map
+import Text.Megaparsec (SourcePos, initialPos)
+
+import Data.Set (Set)
+import qualified Data.Set as Set
+
+
+data Store = Store { variables     :: Map CName (Value, [Value])
+                   , onStage       :: Set CName
+                   , condition     :: Maybe Bool
+                   , output        :: Maybe String
+                   , awaitingInput :: Maybe (CName, InputType)
+                   , act           :: Label
+                   , scene         :: Label
+                   , timer         :: Maybe Int
+                   } deriving (Eq, Show)
+
+emptyState = Store Map.empty Set.empty Nothing Nothing Nothing 1 1 Nothing
+
+data InputType = InChar | InInt deriving (Eq, Show)
 
 -- Character name
 type CName = String
@@ -19,16 +38,41 @@ data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
+data Exception = DivideByZero Annotation                     |
+                 UnrealAnswer Annotation                     |
+                 EmptyStack Annotation Store                 |
+                 AmbiguousYou Annotation (Set CName)         |
+                 NotOnStage CName Annotation (Set CName)     |
+                 AlreadyOnStage CName Annotation (Set CName) |
+                 UndefinedCondition Annotation Store         |
+                 OutOfSteps (Maybe Block) Store              |
+                 InvalidAct Label                            |
+                 InvalidScene Label deriving (Show)
+
+instance Eq Exception where
+  DivideByZero _ == DivideByZero _ = True
+  UnrealAnswer _ == UnrealAnswer _ = True
+  EmptyStack _ _ == EmptyStack _ _ = True
+  AmbiguousYou _ _ == AmbiguousYou _ _ = True
+  NotOnStage _ _ _ == NotOnStage _ _ _ = True
+  AlreadyOnStage _ _ _ == AlreadyOnStage _ _ _ = True
+  UndefinedCondition _ _ == UndefinedCondition _ _ = True
+  OutOfSteps _ _ == OutOfSteps _ _ = True
+  InvalidAct _ == InvalidAct _ = True
+  InvalidScene _ == InvalidScene _ = True
+  _ == _ = True
+
 data Annotation = Annotation String SourcePos deriving (Eq, Show)
-data Exception = DivideByZero |
-                 EmptyStack deriving (Eq, Show)
+blankAnnotation = Annotation "" (initialPos "")
+zeroAnnotation s = Annotation s (initialPos "")
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
 data Program = Program Header (Map.Map Label Act) deriving (Eq, Show)
 data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
-data Scene = Scene Description [(Statement, Annotation)] deriving (Eq, Show)
+type Block = [(Statement, Annotation)]
+data Scene = Scene Description Block deriving (Eq, Show)
 
 data Statement = Enter [CName]  |
                  Exit CName     |

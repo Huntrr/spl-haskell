@@ -5,6 +5,10 @@ This is a [Shakespeare Programming Language](http://shakespearelang.sourceforge.
 ## Usage
 TODO
 
+# Packages
+- megaparsec
+- roman-numerals
+
 
 ## Authors
 Ben Sandler

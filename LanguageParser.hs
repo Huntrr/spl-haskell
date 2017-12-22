@@ -60,6 +60,9 @@ oneOfCharacterNames = map toLower <$>
                       P.<?>
                       "a valid Shakespeare character"
 
+oneOfZero :: Parser String
+oneOfZero = oneOfString' W.zero P.<?> "zero"
+
 oneOfSecondPersonPos :: Parser String
 oneOfSecondPersonPos = oneOfString' W.secondPersonPossessive
                        P.<?> "a second person possesive"
@@ -74,6 +77,12 @@ testParse file = do
                     Right p -> do
                       print p
                       return ()
+
+parseFile file = do
+                  s <- readFile file
+                  case P.parse programP file s of
+                    Left err -> error (P.parseErrorPretty' s err)
+                    Right p -> return p
 
 programP :: Parser Program
 programP = liftA2 Program headerP (Map.fromList <$> many actP) <* P.eof
@@ -336,7 +345,7 @@ expressionP = P.try varP <|>
               P.try modP
 
 constantP :: Parser Expression
-constantP = P.try (constP (Constant 0) (P.string' "nothing" <* P.space)) <|>
+constantP = P.try (constP (Constant 0) (oneOfZero <* P.space)) <|>
             P.try (genericConstant (2 ^) (W.positiveNouns ++ W.neutralNouns)) <|>
             genericConstant (negate . (2 ^)) W.negativeNouns
             where
