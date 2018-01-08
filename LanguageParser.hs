@@ -2,8 +2,7 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
-    -- TODO: remove defer type errors
-{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns -fdefer-type-errors #-}
+{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns #-}
 
 module LanguageParser where
 
@@ -21,15 +20,13 @@ import qualified WordLists            as W
 
 type Parser = P.Parsec Void String
 
--- TODO: How could this file be organized better to be more readable?
-
 -- Utility functions --
 
 tillNoInclC :: Char -> Parser String
 tillNoInclC c = P.many (P.noneOf [c]) <* P.string [c]
 
 isEndPunctuation :: Char -> Bool
-isEndPunctuation c = (c == '.') || (c == '?') || (c == '!')
+isEndPunctuation c = elem c ['.', '?', '!']
 
 parseUntilEndPunc :: Parser String
 parseUntilEndPunc = P.takeWhileP Nothing (not . isEndPunctuation)
@@ -47,7 +44,7 @@ oneOfString' :: [String] -> Parser String
 oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
                  P.notFollowedBy invalid)) <$> l)
                  where
-                   -- a word can only be followed by either a space or end punctuation
+                   -- a word should not be followed by a letter or -
                    invalid :: Parser Char
                    invalid = P.satisfy (\x -> isAlpha x || x == '-')
 
@@ -64,7 +61,6 @@ oneOfSecondPersonPos :: Parser String
 oneOfSecondPersonPos = oneOfString' W.secondPersonPossessive
                        P.<?> "a second person possesive"
 
--- TODO: Next are compile time checks.
 testParse file = do
                   s <- readFile file
                   case P.parse programP file s of
@@ -105,7 +101,7 @@ labelP :: Parser String -> Parser Label
 labelP stringP = do
   s <- stringP
   case fromRoman s of
-    Just n -> return n
+    Just n  -> return n
     Nothing -> P.fancyFailure (Set.singleton (P.ErrorFail
                (s ++ " is not a valid roman numeral")))
 
@@ -197,23 +193,22 @@ inputCharacterP = constP InputCharacter
 
 declarationP :: Parser Sentence
 declarationP =
-  P.try decVarient1 <|> P.try decVarient2 <|> decVarient3
+  Declaration <$> (P.try decVarient1 <|> P.try decVarient2 <|> decVarient3)
   where
 
-    decVarient1 :: Parser Sentence
-    decVarient1 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *>
-                                  oneOfString' W.be *> P.space1 *>
-                                  P.string' "as" *> P.space1 *>
-                                  oneOfString' W.adjectives *> P.space1 *>
-                                  P.string' "as" *> P.space1 *> expressionP)
+    decVarient1 :: Parser Expression
+    decVarient1 = oneOfString' W.secondPerson *> P.space1 *>
+                  oneOfString' W.be *> P.space1 *>
+                  P.string' "as" *> P.space1 *>
+                  oneOfString' W.adjectives *> P.space1 *>
+                  P.string' "as" *> P.space1 *> expressionP
 
-    decVarient2 :: Parser Sentence
-    decVarient2 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *>
-                                  oneOfString' W.be *> P.space1 *> expressionP)
+    decVarient2 :: Parser Expression
+    decVarient2 = oneOfString' W.secondPerson *> P.space1 *>
+                  oneOfString' W.be *> P.space1 *> expressionP
 
-    decVarient3 :: Parser Sentence
-    decVarient3 = Declaration <$> (oneOfString' W.secondPerson *> P.space1 *>
-                                  expressionP)
+    decVarient3 :: Parser Expression
+    decVarient3 = oneOfString' W.secondPerson *> P.space1 *> expressionP
 
 pushP :: Parser Sentence
 pushP = Push <$> (P.string' "Remember" *> P.space1 *> referenceP)
@@ -233,7 +228,6 @@ goToSceneP = genericGoTo GotoScene "scene"
 goToActP :: Parser Sentence
 goToActP = genericGoTo GotoAct "act"
 
--- TODO: this does NOT enforce an ending of ? right now. I think this is fine, let me know what you think.
 conditionalP :: Parser Sentence
 conditionalP = Conditional <$> comparisonP
 

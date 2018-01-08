@@ -2,8 +2,7 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
--- TODO: remove -fdefer-type-errors
-{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns -fdefer-type-errors #-}
+{-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns #-}
 
 module Tests where
 
@@ -50,10 +49,7 @@ samplePrograms = [ ("hello", [], "Hello World!")
                  , ("primes", [], "12357111315")
                  , ("reverse", ['a', 'b', 'c', 'd', '0'], "dcba") ]
 
--- TODO: Run all these programs with given inputs and check for outputs
-
 ------------ HUnit Tests ---------------------
--- TODO: PARSER
 -- Unknown vocabulary
 
 helloWorldHeader = Header
@@ -107,7 +103,6 @@ testParseExpression =
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant (-4)))) (Cube (Constant (-4)))),
       P.parse expressionP "" "Juliet" ~?= Right (Var (They "juliet")),
-      -- TODO: multi-word variables don't work yet
       P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the ghost"))),
       P.parse expressionP "" "the product of Juliet and a Pig"
         ~?= Right (Product (Var (They "juliet")) (Constant (-1))),
