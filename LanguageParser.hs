@@ -48,6 +48,12 @@ oneOfString' l = P.choice ((\s -> P.try (P.string' s <*
                    invalid :: Parser Char
                    invalid = P.satisfy (\x -> isAlpha x || x == '-')
 
+sentence :: String -> Parser String
+sentence s = case words s of
+              (x:xs) -> foldl (\rest word -> rest <* P.space1 <*
+                        P.string' word) (P.string x) xs
+              []   -> P.string' ""
+
 constP :: a -> Parser b -> Parser a
 constP a p = const a <$> (p <* P.space)
 
@@ -372,27 +378,20 @@ unOp :: (Expression -> Expression) -> Parser a -> Parser Expression
 unOp con word = con <$> (word *> P.space *> expressionP)
 
 squareP :: Parser Expression
-squareP = unOp Square (P.string' "the" <* P.space1 <* P.string' "square" <*
-                      P.space1 <* P.string' "of")
+squareP = unOp Square (sentence "the square of")
 
 cubeP :: Parser Expression
-cubeP = unOp Cube (P.string' "the" <* P.space1 <* P.string' "cube" <*
-                  P.space1 <* P.string' "of")
+cubeP = unOp Cube (sentence "the cube of")
 
 squareRootP :: Parser Expression
-squareRootP = unOp SquareRoot (P.string' "the" <* P.space1 <* P.string' "square"
-                              <* P.space1 <* P.string' "root" <* P.space1 <*
-                              P.string' "of")
+squareRootP = unOp SquareRoot (sentence "the square root of")
 
 twiceP :: Parser Expression
 twiceP = unOp Twice (P.string' "twice")
 
 modP :: Parser Expression
 modP = liftA2 Mod
-       (P.string' "the" *> P.space1 *> P.string' "remainder" *> P.space1 *>
-       P.string' "of" *> P.space1 *> P.string' "the" *> P.space1 *>
-       P.string' "quotient" *> P.space1 *> P.string' "between" *> P.space1 *>
-       expressionP)
+       (sentence "the remainder of the quotient between" *> P.space1 *> expressionP)
        (P.string' "and" *> P.space1 *> expressionP)
 
 varP :: Parser Expression
