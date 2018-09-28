@@ -24,6 +24,9 @@ runFile :: String -> Maybe Int -> IO ()
 runFile file n = do p <- parseFile file
                     runIO' p n
 
+runComplete :: String -> IO ()
+runComplete file = runFile file Nothing
+
 runFileInts :: String -> [Int] -> IO ()
 runFileInts file input = do p <- parseFile file
                             printResult $ runInt p input

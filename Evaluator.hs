@@ -39,7 +39,11 @@ evalExpression a speaker = eval where
   eval (Sum e1 e2)        = bop (+) e1 e2
   eval (Difference e1 e2) = bop (-) e1 e2
   eval (Product e1 e2)    = bop (*) e1 e2
-  eval (Mod e1 e2)        = bop mod e1 e2
+  eval (Mod e1 e2)        = do
+    v1 <- eval e1
+    v2 <- eval e2
+    when (v2 == 0) (throwError $ DivideByZero a)
+    return $ mod v1 v2
   eval (Square e)         = op (^2) e
   eval (Cube e)           = op (^3) e
   eval (Quotient e1 e2)   = do
@@ -122,7 +126,8 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
     value <- getValue a n
     state <- get
     let map = variables state
-     in put $ state { variables = Map.insertWith (\(x, []) (v, xs) -> (v, x:xs)) name (value, []) map}
+     in put $ state { variables = Map.insertWith
+                      (\(_, x:_) (v, xs) -> (v, x:xs)) name (0, [value]) map }
   eval Pop              = do
     state <- get
     name  <- getOther a cname

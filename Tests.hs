@@ -15,7 +15,9 @@ import           Test.QuickCheck      (Arbitrary (..), Gen, Testable (..),
                                        maxSize, maxSuccess, oneof,
                                        quickCheckWith, resize, scale, sized,
                                        stdArgs, (==>), choose, generate,
-                                       sublistOf)
+                                       sublistOf, Property, maxDiscardRatio,
+                                       infiniteListOf)
+import           Test.QuickCheck.Monadic as QuickCheckM
 
 import Debug.Trace
 import Data.Char (ord, chr)
@@ -32,7 +34,9 @@ import           Data.Either.Extra
 import           Evaluator
 import           LanguageParser
 import           PrettyPrinter
+import           Optimize
 import           Main
+import           Stepper
 import qualified WordLists            as W
 import Text.PrettyPrint (render)
 
@@ -45,13 +49,19 @@ main :: IO ()
 main = do
    _ <- runTestTT (TestList [testParseHeader, testParseConstant,
                              testParseExpression, testParseComparison,
-                             testParseSentence])
+                             testParseSentence, testEvaluator])
    putStrLn "Testing Roundtrip property..."
-   quickCheckN 500 prop_roundtrip
+   quickCheckN 100 prop_roundtrip
+   quickcheck_evaluator
+   quickCheckS 15 prop_roundtrip_step
    return ()
 
 quickCheckN :: Test.QuickCheck.Testable prop => Int -> prop -> IO ()
 quickCheckN n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100 }
+
+quickCheckL n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 100
+                                           , maxDiscardRatio = n * 10 }
+quickCheckS n = quickCheckWith $ stdArgs { maxSuccess = n , maxSize = 15 }
 
 file f = "samples/" ++ f ++ ".spl"
 
@@ -71,9 +81,6 @@ outputs p i o = p ~: TestCase $ do
 
 
 ------------ HUnit Tests ---------------------
--- TODO: PARSER
--- Unknown vocabulary
-
 helloWorldHeader = Header
                    "The Infamous Hello World Program."
                    [
@@ -125,7 +132,6 @@ testParseExpression =
       P.parse expressionP "" "the difference between the square of the difference between my little pony and your big hairy hound and the cube of your sorry little codpiece"
         ~?= Right (Difference (Square (Difference (Constant 2) (Constant (-4)))) (Cube (Constant (-4)))),
       P.parse expressionP "" "Juliet" ~?= Right (Var (They "juliet")),
-      -- TODO: multi-word variables don't work yet
       P.parse expressionP "" "the cube of the Ghost" ~?= Right (Cube (Var (They "the ghost"))),
       P.parse expressionP "" "the product of Juliet and a Pig"
         ~?= Right (Product (Var (They "juliet")) (Constant (-1))),
@@ -207,12 +213,10 @@ testParseSentence =
         ~?= Declaration (Constant (-8))
     ]
 
--- TODO: PRETTY PRINTER
-
 
 ------------ EVALUATOR ----------------------
-evaluatorTests :: Test
-evaluatorTests = TestList [
+testEvaluator :: Test
+testEvaluator = TestList [
     sampleTest,
     expTests,
     refTests,
@@ -231,8 +235,14 @@ samplePrograms = [ ("hello", [], "Hello World!\n")
                  , ("bubble-sort", toInts "97531", "13579")
                  , ("bubble-sort", toInts "20452", "02245")
                  , ("bubble-sort", toInts "11110", "01111")
-                 -- , ("stack-sort", [-1], "")
-                 -- , ("stack-sort", [1, -1], "1")
+                 , ("stack-sort", [-1], "")
+                 , ("stack-sort", [1, -1], "1\n")
+                 , ("stack-sort", [1, 2, 3, 4, 5, -1], "1\n2\n3\n4\n5\n")
+                 , ("stack-sort", [9, 7, 5, 3, 1, -1], "1\n3\n5\n7\n9\n")
+                 , ("stack-sort", [2, 0, 4, 5, 2, -1], "0\n2\n2\n4\n5\n")
+                 , ("stack-sort", [1, 1, 1, 1, 0, -1], "0\n1\n1\n1\n1\n")
+                 , ("stack-sort", [500, 124, 306, 42, 10, -1],
+                    "10\n42\n124\n306\n500\n")
                  ]
 
 toInts = map f where
@@ -323,42 +333,202 @@ compTests = TestList [
     compIs expState "C" (Comparison E (Var Me) (Var Me)) True
   ]
 
--- evalSentence
--- after a decl, if that expression evaluates, char has that value
+-- helepr function for testing sentences and blocks
+data Outcome = BlockIO | JumpScene | JumpAct | CompleteState (Store -> Bool) |
+               FailError Exception
 
--- a pop then a push always yields same constant
+instance Eq Outcome where
+  BlockIO == BlockIO = True
+  JumpScene == JumpScene = True
+  JumpAct == JumpAct = True
+  _ == _ = False
 
--- conditional sets conditional appropriately
+testBlock :: Store -> Block -> Outcome -> Bool
+testBlock st b outcome =
+  (runCont (runExceptT (fst <$> runStateT cont st)) f) where
+    f (Left e)  = case outcome of
+                    FailError e' -> e == e'
+                    _            -> False
+    f (Right v) = v
+    cont =
+      callCC $ \resolve -> do
+        r1 <- callCC $ \blockIO -> do
+          r2 <- callCC $ \jumpAct -> do
+            r3 <- callCC $ \jumpScene -> do
+              executeBlock b blockIO jumpAct Nothing jumpScene
+              case outcome of
+                CompleteState f -> do
+                  s <- get
+                  resolve (f s)
+                  return Nothing
+                _ -> return Nothing
+            case r3 of
+              Nothing -> return Nothing
+              Just _ -> resolve (outcome == JumpScene) >> return Nothing
+          case r2 of
+            Nothing -> return Nothing
+            Just _ -> resolve (outcome == JumpAct) >> return Nothing
+        case r1 of
+          Nothing -> return False
+          Just _ -> resolve (outcome == BlockIO) >> return False
 
--- executeBlock
--- if a block finishes without IO or GOTO it goes to the next scene
+testSentence :: CName -> Store -> Sentence -> Outcome -> Bool
+testSentence cn st s outcome =
+  (runCont (runExceptT (fst <$> runStateT cont st)) f) where
+    f (Left e)  = case outcome of
+                    FailError e' -> e == e'
+                    _            -> False
+    f (Right v) = v
+    cont =
+      callCC $ \resolve -> do
+        r1 <- callCC $ \blockIO -> do
+          r2 <- callCC $ \jumpAct -> do
+            r3 <- callCC $ \jumpScene -> do
+              evalSentence blockIO jumpAct jumpScene blankAnnotation cn s
+              s <- get
+              case outcome of
+                CompleteState f -> resolve (f s) >> return (-1)
+                _ -> return (-1)
+            case r3 of
+              (-1) -> resolve False >> return (-1)
+              _    -> resolve (outcome == JumpScene) >> return (-1)
+          case r2 of
+            (-1) -> return ()
+            _ -> resolve (outcome == JumpAct) >> return ()
+        resolve (outcome == BlockIO) >> return False
 
 
--- if a block calls IO then it has input or output
 
--- if a block calls gotoScene it has gotoScene
 
--- if a block calls gotoAct then it has gotoAct
 
 ------------- QUICKCHECK --------------------
+quickcheck_evaluator :: IO ()
+quickcheck_evaluator = do
+  quickCheckN 500 prop_sentence_decl
+  quickCheckN 500 prop_sentence_decl2
+  quickCheckN 500 prop_sentence_conditional
+  quickCheckN 500 prop_sentence_push_pop
+  quickCheckL 250 prop_block_io
+  quickCheckL 250 prop_block_scene
+  quickCheckL 250 prop_block_act
+
+-- evalSentence
+-- after a decl, if that expression evaluates, char has that value
+prop_sentence_decl :: Expression -> Store -> QCName -> QCName -> Property
+prop_sentence_decl e s qn qo = let QCName n = qn
+                                   QCName o = qo
+                                   s' = s { onStage = Set.fromList [n, o] }
+                                   v  = fst $ withState s' (evalExpression
+                                                            blankAnnotation n e)
+                                   f st = case Map.lookup o (variables st) of
+                                            Nothing -> False
+                                            Just (v', _) -> Right v' == v
+  in n /= o  && isRight v ==>
+    testSentence n s' (Declaration e) (CompleteState f)
+
+prop_sentence_decl2 :: Expression -> Store -> QCName -> QCName -> Property
+prop_sentence_decl2 e s qn qo = let QCName n = qn
+                                    QCName o = qo
+                                    s' =
+                                      s { onStage = (Set.insert n (onStage s)) }
+  in n /= o && length (onStage s') > 2  ==>
+    testSentence n s' (Declaration e)
+      (FailError $ AmbiguousYou blankAnnotation Set.empty)
+
+-- conditional sets conditional appropriately
+prop_sentence_conditional :: Comparison -> Store -> QCName -> Property
+prop_sentence_conditional c s qn = let
+    QCName n = qn
+    s'       = s { onStage = Set.insert n (onStage s) }
+    v  = fst $ withState s' (evalComparison blankAnnotation n c)
+    f st     = Right (condition st) == (Just <$> v)
+ in isRight v ==> testSentence n s' (Conditional c) (CompleteState f)
+  
+
+-- a pop then a push always yields same constant
+prop_sentence_push_pop :: Reference -> Store -> QCName -> QCName -> Property
+prop_sentence_push_pop r s qn qo = let
+    QCName n = qn
+    QCName o = qo
+    s' = s { onStage = Set.fromList [n, o] }
+    v  = fst $ withState s' (evalExpression blankAnnotation n (Var r))
+    f st = case Map.lookup o (variables st) of
+             Just (_, v':_) -> Right v' == v
+             _              -> False
+  in n /= o  && isRight v ==>
+    testSentence n s' (Push r) (CompleteState f)
+
+
+
+-- executeBlock
+isIO (Line _ s) = f s where
+  f OutputNumber    = True
+  f OutputCharacter = True
+  f InputNumber     = True
+  f InputCharacter  = True
+  f (IfSo s)        = f s
+  f (IfNot s)       = f s
+  f _               = False
+isIO _ = False 
+blockHasIO = any isIO
+
+isJumpScene (Line _ s) = f s where
+  f (GotoScene _)   = True
+  f (IfSo s)        = f s
+  f (IfNot s)       = f s
+  f _               = False
+isJumpScene _ = False 
+blockHasJumpScene = any isJumpScene
+
+isJumpAct (Line _ s) = f s where
+  f (GotoAct _)     = True
+  f (IfSo s)        = f s
+  f (IfNot s)       = f s
+  f _               = False
+isJumpAct _ = False 
+blockHasJumpAct = any isJumpAct
+
+-- if a block blocks, it should have the corresponding type of block in its
+-- body
+prop_block_io :: Store -> Block -> Property
+prop_block_io s b = let t  = testBlock s b
+                        l  = fst <$> b in
+  t BlockIO ==> blockHasIO l
+
+prop_block_scene :: Store -> Block -> Property
+prop_block_scene s b = let t  = testBlock s b
+                           l  = fst <$> b in
+  t JumpScene ==> blockHasJumpScene l
+
+prop_block_act :: Store -> Block -> Property
+prop_block_act s b = let t  = testBlock s b
+                         l  = fst <$> b in
+  t JumpAct ==> blockHasJumpAct l
+
 ------------- Roundtrip property -------------
-prop_roundtrip :: Program -> Bool
-prop_roundtrip s = undefined
--- ^^ TODO THIS WON'T WORK
--- (Constant 7
---       => "the sum of a large angry red king and a rat"
---       => Sum (Constant 8) (Constant (-1)))
--- Could check bounded program equivalency instead?
+do_roundtrip :: Program -> IO Program
+do_roundtrip prog = do
+  doc <- pp prog
+  prog' <- let s = render doc in
+              case P.parse programP "" s of
+                    Left err -> error (P.parseErrorPretty' s err)
+                    Right p -> return p
+  return $ optimizer prog'
 
--- TODO program equivalency with N steps (using stepper)
+prop_roundtrip :: Program -> Property
+prop_roundtrip prog = monadicIO $ do
+  prog' <- QuickCheckM.run (do_roundtrip prog)
+  QuickCheckM.assert (optimizer prog == prog')
 
--- TODO optimizers don't change programs (check bounded computatioN)
--- check for sound/correct optimizations
+-- program equivalency with N steps (using stepper)
+prop_roundtrip_step :: Program -> QCInput -> Property
+prop_roundtrip_step prog qinput = let QCInput input = qinput in monadicIO $ do
+  prog' <- QuickCheckM.run (do_roundtrip prog)
+  let o1 = runFixedSteps prog 1500 input
+      o2 = runFixedSteps prog' 1500 input
+   in do QuickCheckM.pre $ (isLeft o1) && (isLeft o2)
+         QuickCheckM.assert (o1 == o2)
 
--- TODO optimizers make ASTs smaller
--- Could we also profile evaluations to see if optimizers make programs faster?
-
--- TODO any literal constant can be pretty printed
 -- i.e. (Constant 7) pretty printed and parsed will not be (Constant 7) but
 -- should still EVALUATE to (7) (b/c all literals are powers of 2)
 prop_constant :: Value -> IO Bool
@@ -368,10 +538,41 @@ prop_constant c = do
 
 
 ------------- Arbitrary Instance -------------
+-- first a simple arbitrary for store
+instance Arbitrary Store where
+  arbitrary = Store <$> (Map.fromList <$>
+                          (zip <$> (sublistOf chars) <*> arbitrary))
+                    <*> (Set.fromList <$> (sublistOf chars))
+                    <*> arbitrary
+                    <*> (pure Nothing)
+                    <*> (pure Nothing)
+                    <*> (choose (1,6))
+                    <*> (choose (1,6))
+                    <*> (pure Nothing)
+  shrink _ = []
+
+data QCInput = QCInput [Int]
+instance Show QCInput where
+  show (QCInput l) = show l
+
+instance Arbitrary QCInput where
+  arbitrary = QCInput <$> infiniteListOf arbitrary
+  shrink _ = []
+
+------------- ARBITRARY PROGRAM --------------
+
+data QCName = QCName String
+instance Show QCName where
+  show (QCName s) = show s
+
+instance Arbitrary QCName where
+  arbitrary = QCName <$> arbCname
+  shrink (QCName _) = []
+
 number :: [a] -> [(Int, a)]
 number = zip [1..]
 
-chars = ["Romeo", "Juliet", "Hamlet", "Ophelia", "Othello", "Puck", "The Ghost"]
+chars = ["romeo", "juliet", "hamlet", "ophelia", "othello", "puck", "the ghost"]
 arbCname :: Gen CName
 arbCname = elements chars
 
@@ -461,7 +662,7 @@ genStatement stage n
           genEnter = do
             cs <- Set.fromList <$> listOf arbCname
             let cs'  = Set.take 2 $ cs Set.\\ stage
-             in return (Set.union cs' stage, [Enter (Set.toList cs')])
+             in if length cs' > 0 then return (Set.union cs' stage, [Enter (Set.toList cs')]) else return (stage, [])
           genLine = do
             speaker <- elements list
             other   <- elements (Set.toList $ Set.delete speaker stage)
@@ -503,11 +704,11 @@ instance Arbitrary Annotation where
   shrink a = [a]
 
 instance Arbitrary Scene where
-  arbitrary = Scene "SceneName" <$> sized genBlock
+  arbitrary = Scene "SceneName." <$> sized genBlock
   shrink (Scene d b) = Scene d <$> [take n b | n <- [1..(length b - 1)]]
 
 instance Arbitrary Act where
-  arbitrary = Act "ActName" <$> (Map.fromList . number <$> list)
+  arbitrary = Act "ActName." <$> (Map.fromList . number <$> list)
     where
       list = (:) <$> (arbitrary :: Gen Scene) <*> (arbitrary :: Gen [Scene])
   shrink (Act d sceneMap) =
@@ -516,8 +717,8 @@ instance Arbitrary Act where
      in Act d . Map.fromList . number <$> take (length list `div` 2) list'
 
 instance Arbitrary Program where
-  arbitrary = Program (Header "Much Ado about Monads"
-    ((\c -> Character c "a character") <$> chars)) <$>
+  arbitrary = Program (Header "Much Ado about Monads."
+    ((\c -> Character c "a character.") <$> chars)) <$>
       (Map.fromList . number <$> arbitrary)
   shrink (Program h actMap) =
     let list  = snd <$> Map.toList actMap

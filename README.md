@@ -1,9 +1,10 @@
 # Much Ado About Monads
 This is a [Shakespeare Programming Language](http://shakespearelang.sourceforge.net/report/shakespeare/) interpreter and optimizer written in Haskell.
 
-
 ## Usage
-TODO
+Build with `ghc Main.hs -o spl` and then run with `spl filename [timeout]` which
+will execute `filename` for `timeout` steps (or forever if no `timeout` is
+specified.
 
 # Packages
 - megaparsec
@@ -11,45 +12,19 @@ TODO
 
 
 ## Authors
-Ben Sandler
-Hunter Lightman
-Kasra Koushan
+Ben Sandler - sandlerb
+Hunter Lightman - hunterl
+Kasra Koushan koushan
 
 
-## Questions:
-- Using libraries. From homework/other libraries (Parsec?)
-- Instead of optimizations... x86 compilation?
-    - Would be very inefficient (maybe not though since we can statically figure out which variables are accessed in which scenes!)
-    - Or maybe just to C. Compilation of I/O to x86 just seems like a hassle.
-- Profiling before/after optimization with QuickCheck to see if optimization makes programs strictly faster?? Or is that not right?
-- Do our optimizations require a transformation to SSA? Because I'm not sure we could do that!
-
-Questions about Evaluator
-- Monad type for evaluator, same as from exercise?
-- How to handle IO (evalSentence), does all of our code need to be in IO monad???
-- How to annotate error as it propagates (i.e. add line and line number!)
-- Idea for IO: "Execution Monad" that can "Block" on a state
-    - So execute is `IO ()` and it runs this "Execution Monad" until it blocks
-      for IO, sequences in necessary IO and then continues Execution based on
-      the blocked state (maybe CPS style, Blocked execution gives a function
-      that result of IO is fed into to continue execution...)
-
-
-## Modules:
-1. Parser (from library)
-2. Language (AST stuff)
-3. SPL Parser
-4. Pretty Printer
-5. Optimization
-    - Arithmetic simplification
-    - Constant propagation
-    - Dead code elimination
-    - Can we free up tails of stacks that are never used?
-    - ...
-6. Evaluator
-7. Stepper
-8. Vocabulary Generators
-9. Tests
-10. Compiler??? (maybe not.)
-    - I think, ideally, we optimize the SPL AST and then compile to x86 or C. It'd be really neat to see how the optimized vs. unoptimized compiled code performed
-    - But we might not have enough time
+## Modules (in approximate order for you to read it in):
+1. AST.hs -- high level description of our AST for SPL
+1. WordLists.hs -- Simple, python-generated file containing the different wordlists, needed by the Parer
+1. LanguageParser.hs -- The parser itself
+1. Evaluator.hs -- The evaluator for SPL, core of evaluation logic is all here
+1. Stepper.hs -- A couple auxiliary functions using the evaluator to provide the ability to execute a set number of steps of the program.
+1. ExceptionPrinter -- Optional. Utilities for pretty printing exceptions for better error handling/debugging.
+1. Optimize.hs -- A couple of optimization oriented function for the AST. Mainly concerned with arithmetic simplification of expressions.
+1. PrettyPrinter.hs -- The SPL pretty printer
+1. Tests.hs -- Tests for all of our modules
+1. Main.hs -- The glue that ties it all together for our executable.
