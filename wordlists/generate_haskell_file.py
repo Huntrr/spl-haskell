@@ -32,8 +32,12 @@ def parse_files(directory):
             outputs.append((l_name, l))
 
     for (name, l) in outputs:
+        print('module WordLists where\n')
         print('{} = {}'.format(name, l))
         print()
+        print('adjectives = neutralAdjectives ++ negativeAdjectives ++ positiveAdjectives\n')
+        print('nouns = positiveNouns ++ negativeNouns ++ neutralNouns\n')
+        print('possesives = (++ "\'s") <$> nouns')
 
 if __name__ == '__main__':
     parse_files('.')
