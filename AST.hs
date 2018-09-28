@@ -6,57 +6,32 @@
 
 module AST where
 
-import Data.Map (Map)
 import qualified Data.Map.Lazy as Map
-import Text.Megaparsec (SourcePos)
-
-import Data.Set (Set)
-import qualified Data.Set as Set
-
-
-data Store = Store { variables     :: Map CName (Value, [Value])
-                   , onStage       :: Set CName
-                   , condition     :: Maybe Bool
-                   , output        :: Maybe String
-                   , awaitingInput :: Maybe (CName, InputType)
-                   , act           :: Label
-                   , scene         :: Label
-                   } deriving (Eq, Show)
-
-emptyState = Store Map.empty Set.empty Nothing Nothing Nothing 1 1
-
-data InputType = InChar | InInt deriving (Eq, Show)
 
 -- Character name
 type CName = String
 type Description = String
 type Title = String
-type Label = Int
+type Label = String
 
 data Character = Character CName Description deriving (Eq, Show)
 
 -- Lets us leave lines of the source code in the AST so we can display for
 -- debugging
-data Exception = DivideByZero Annotation                     |
-                 UnrealAnswer Annotation                     |
-                 EmptyStack Annotation Store                 |
-                 AmbiguousYou Annotation (Set CName)         |
-                 NotOnStage CName Annotation (Set CName)     |
-                 AlreadyOnStage CName Annotation (Set CName) |
-                 UndefinedCondition Annotation Store         |
-                 InvalidAct Label                            |
-                 InvalidScene Label deriving (Eq, Show)
-
-data Annotation = Annotation String SourcePos deriving (Eq, Show)
+-- TODO: change to include line number/character position/other data
+type Annotation = String
+data Exception = DivideByZero |
+                 EmptyStack deriving (Eq, Show)
 
 data Header = Header Title [Character] deriving (Eq, Show)
 
 data Program = Program Header (Map.Map Label Act) deriving (Eq, Show)
 data Act = Act Description (Map.Map Label Scene) deriving (Eq, Show)
 
-type Block = [(Statement, Annotation)]
-data Scene = Scene Description Block deriving (Eq, Show)
+data Scene = Scene Description [(Statement, Annotation)] deriving (Eq, Show)
 
+-- TODO: for Enter/Exit, it must be a list of 1 or more characters. We can statically
+-- enforce that with a slightly different list type.
 data Statement = Enter [CName]  |
                  Exit CName     |
                  Exeunt [CName] |
@@ -64,7 +39,8 @@ data Statement = Enter [CName]  |
                  deriving (Eq, Show)
 
 type Value = Int
-
+-- TODO: I am using Reference instead of CName because variables can be, and often
+-- are second person pronouns. They can also just be regular character names.
 data Reference = They CName | You | Me deriving (Eq, Show)
 
 data Expression = Constant Value                   |
@@ -76,7 +52,6 @@ data Expression = Constant Value                   |
                   Cube       Expression            |
                   SquareRoot Expression            |
                   Twice      Expression            |
-                  Mod        Expression Expression |
                   Var Reference deriving (Eq, Show)
 
 data Relationship = Lt | Le | E | Ne | Gt | Ge deriving (Eq, Show)
@@ -85,13 +60,12 @@ data Comparison = Comparison Relationship Expression Expression
   deriving (Eq, Show)
 
 data Sentence = IfSo Sentence          |
-                IfNot Sentence         |
                 OutputNumber           |
                 OutputCharacter        |
                 InputNumber            |
                 InputCharacter         |
                 Declaration Expression |
-                Push Reference         |
+                Push                   |
                 Pop                    |
                 GotoScene Label        |
                 GotoAct Label          |
