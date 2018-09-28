@@ -2,9 +2,7 @@
     FlexibleInstances, ScopedTypeVariables #-}
 {-# OPTIONS -fwarn-tabs -fwarn-incomplete-patterns  #-}
 
-module Evaluator (runIO, runInt, runString, runList) where
-
-import Debug.Trace (trace)
+module Evaluator where
 
 import Data.Char (ord, chr)
 
@@ -21,13 +19,18 @@ import Control.Monad.Cont (MonadCont(..), ContT, Cont, runCont, runContT)
 import ExceptionPrinter
 import AST
 
--- TODO: Store will probably change
+-- Represents a partial computation, can be continued by `continue`
 data Partial a = Fail Exception | Complete | Continue (a, Store) | Start Store
 
--- TODO: Is this the right monad type??
--- Alternative Triple idea... Either Error, State, or BLOCK!
+-- Evaluation monad
 type M a = ExceptT Exception (StateT Store (Cont (Partial a))) a
+runM :: M a -> Store -> ((Either Exception a, Store) -> Partial a) -> Partial a
+runM m s = runCont (runStateT (runExceptT m) s)
 
+
+------------------------------------------------------------------------------
+-- |                           SIMPLE EVALUATORS                          | --
+------------------------------------------------------------------------------
 evalExpression :: forall m. (MonadError Exception m, MonadState Store m) =>
   Annotation -> CName -> Expression -> m Value
 evalExpression a speaker = eval where
@@ -86,7 +89,7 @@ evalComparison a speaker (Comparison r e1 e2) = do
   op Ge = (>=)
 
 evalSentence :: forall m.
-  (MonadCont m, MonadError Exception m, MonadState Store m) =>
+  (MonadError Exception m, MonadState Store m) =>
   (() -> m (Maybe Block))
   -> (Label -> m (Maybe Label))
   -> (Label -> m (Maybe Label))
@@ -159,6 +162,13 @@ evalSentence handleIO gotoAct gotoScene a cname = eval where
     handleIO ()
     return ()
 
+
+
+
+
+------------------------------------------------------------------------------
+-- |                         EVALUATION HELPERS                           | --
+------------------------------------------------------------------------------
 getOther :: (MonadState Store m, MonadError Exception m) =>
   Annotation -> CName -> m String
 getOther a me = do
@@ -176,9 +186,23 @@ getValue a c = do
     Nothing     -> return 0
     Just (v, _) -> return v
 
+decrTimer :: (MonadState Store m, MonadError Exception m) =>
+  (() -> m (Maybe Block)) -> m ()
+decrTimer halt = do
+  state <- get
+  case timer state of
+    Nothing -> return ()
+    Just v  -> if v <= 0 then halt () >> return ()
+                         else put $ state { timer = Just (v - 1) }
 
+
+
+
+------------------------------------------------------------------------------
+-- |                          BLOCK EVALUATORS                            | --
+------------------------------------------------------------------------------
 evalStatement :: forall m.
-  (MonadCont m, MonadError Exception m, MonadState Store m) =>
+  (MonadError Exception m, MonadState Store m) =>
   (() -> m (Maybe Block))
   -> (Label -> m (Maybe Label))
   -> (Label -> m (Maybe Label))
@@ -206,14 +230,13 @@ evalStatement handleIO gotoAct gotoScene (s, a) = eval s where
     set <- getCharSet
     if Set.notMember cname set then throwError (NotOnStage cname a set) else
       putCharSet $ Set.delete cname set
-  -- TODO: prevent characters not in the play from entering ??
   enterChar cname = do
     set <- getCharSet
     if Set.member cname set then throwError (AlreadyOnStage cname a set) else
       putCharSet $ Set.insert cname set
 
 executeBlock :: forall m.
-  (MonadState Store m, MonadCont m, MonadError Exception m) =>
+  (MonadState Store m, MonadError Exception m) =>
    Block
    -> (Maybe Block -> m (Maybe Block))
    -> (Maybe Label -> m (Maybe Label))
@@ -223,13 +246,27 @@ executeBlock :: forall m.
 executeBlock b handleIO gotoAct nextScene gotoScene = go b where
   go :: Block -> m (Maybe Label)
   go [] = return nextScene
-  go (s:rest) = do
-    evalStatement (\() -> handleIO (Just rest))
+  go (s:rest) = let halt () = handleIO (Just rest) in do
+    decrTimer halt
+    evalStatement halt
       (gotoAct . Just) (gotoScene . Just) s
-    -- state <- get
-    -- trace (show s ++ "\n\t" ++ show state ++ "\n\n\n") (go rest)
     go rest
 
+
+
+
+------------------------------------------------------------------------------
+-- |                       FLOW CONTROL MANAGEMENT                        | --
+------------------------------------------------------------------------------
+-- | executeScene and executeAct are responsible for higher level flow    | --
+-- | control management in the interpreter. they handle loading the       | --
+-- | appropriate scenes/acts, and then passing the continuation callback  | --
+-- | to executeBlock so that we can invoke GOTOs on lower level functions | --
+-- |                                                                      | --
+-- | they're both pretty similar in structure, acting as a loop that      | --
+-- | continues to get the next scene/act every time the previous one      | --
+-- | finishes (or ends early from a GOTO) until there are no more acts    | --
+------------------------------------------------------------------------------
 executeScene :: (MonadState Store m, MonadCont m, MonadError Exception m) =>
   Map Label Scene
   -> Maybe Block
@@ -279,80 +316,127 @@ executeAct map b handleIO = do
 
 firstScene = 1
 
-continueFixed :: Map Label Act -> Partial (Maybe Block) -> [Int] -> Either String Exception
-continueFixed actMap = go [] where
-  go :: String -> Partial (Maybe Block) -> [Int] -> Either String Exception
-  go _ (Fail e) _   = Right e
-  go res Complete _ = Left $ res ++ "\n"
-  go res (Start state) input = go res (Continue (Nothing, state)) input
-  go res (Continue (block, state)) input = go
-    (res ++ out)
-    next
-    input'
 
-    where
-      out            = case output state of
-                         Nothing -> ""
-                         Just s  -> s
-      (input', vars) = case awaitingInput state of
-                         Nothing         -> (input, variables state)
-                         Just (cname, t) ->
-                           case input of
-                             i:nput ->
-                               (nput, Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (i, []) (variables state))
-                             _ -> error "Not enough inputs"
+------------------------------------------------------------------------------
+-- |                          PROGRAM CONTINUERS                          | --
+------------------------------------------------------------------------------
+-- | to handle IO, we model program execution as a series of "CPU bursts" | --
+-- | at the end of each burst, the interpreter returns a Partial          | --
+-- | representing just that one burst of execution. We need a method of   | --
+-- | continuing execution from a burst (collecting input and printing     | --
+-- | output as necessary after each burst) which is what the Continue     | --
+-- | function is for. It will continue from a previous burst.             | --
+-- |                                                                      | --
+-- | we also generalize for different types of input and output, the two  | --
+-- | we implement are IO (blocking) and pure [Int] input -> String output | --
+-- | To do this, we generalize continue for the ProgIO class, which just  | --
+-- | defines a way to get ints, characters, and print a string. Then we   | --
+-- | make instances of ProgIO for IO and (State FixedIO)                  | --
+------------------------------------------------------------------------------
+class Monad m => ProgIO m where
+  inInt  :: m Int
+  inChar :: m Int
+  outStr :: String -> m ()
 
-      next = runM (callCC $ executeAct actMap block)
-             (updateState state vars) cont
+instance ProgIO IO where
+  inInt = do
+    i <- getLine
+    return $ read i
 
-continueIO :: Map Label Act -> Partial (Maybe Block) -> IO ()
-continueIO actMap = go where
-  go :: Partial (Maybe Block) -> IO ()
-  go (Fail e) = do
-    putStrLn $ exceptionPretty e
-    return ()
-  go Complete = do
-    putStr $ "\n"
-    return ()
-  go (Start state) = go $ Continue (Nothing, state)
+  inChar = do
+    c <- getChar
+    return $ case c of
+               '\n' -> -1
+               _    -> ord c
+
+  outStr = putStr
+
+data FixedIO = FixedIO [Int] String
+instance ProgIO (State FixedIO) where
+  inInt = do
+    FixedIO i o <- get
+    case i of
+      []   -> error "Not enough inputs"
+      x:xs -> do
+        put (FixedIO xs o)
+        return x
+
+  inChar = inInt
+
+  outStr s = do
+    FixedIO i o <- get
+    put (FixedIO i (o ++ s))
+
+
+-- | This is the continue function itself, which runs a partial to completion
+continue :: forall m. ProgIO m =>
+  Map Label Act -> Partial (Maybe Block) -> m (Maybe Exception)
+continue actMap = go where
+  go :: Partial (Maybe Block) -> m (Maybe Exception)
+  go (Fail e)      = return $ Just e
+  go Complete      = return $ Nothing
+  go (Start state) = go (Continue (Nothing, state))
   go (Continue (block, state)) = do
     putOutput (output state)
     variables' <- readInput (awaitingInput state) (variables state)
-    go $ runM (callCC $ executeAct actMap block)
-         (updateState state variables') cont
+    if outOfSteps state then go (Fail $ OutOfSteps block state) else
+      go $ runM (callCC $ executeAct actMap block)
+        (updateState state variables') cont
     
   putOutput Nothing  = return ()
-  putOutput (Just c) = putStr c
+  putOutput (Just c) = outStr c
   readInput Nothing m = return m
-  readInput (Just (cname, InChar)) m = do
-    c <- getChar
-    let val = case c of
-              '\n' -> -1
-              _    -> ord c in
-      return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) m
-  readInput (Just (cname, InInt))  m = do
-    i <- getLine
-    return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (read i, []) m
+  readInput (Just (cname, t))  m = do
+    val <- case t of
+             InChar -> inChar
+             InInt  -> inInt
+    return $ Map.insertWith (\(v, _) (_, s) -> (v, s)) cname (val, []) m
+
+  outOfSteps state = case timer state of
+                       Nothing -> False
+                       Just v  -> v <= 0
+
+  cont :: (Either Exception (Maybe Block), Store) -> Partial (Maybe Block)
+  cont (Left e, _)                 = Fail e
+  cont (Right Nothing, state)      = Complete
+  cont (Right (Just block), state) = Continue (Just block, state)
+
+  updateState state vars = state { output = Nothing
+                                 , awaitingInput = Nothing
+                                 , variables = vars }
 
 
-cont :: (Either Exception (Maybe Block), Store) -> Partial (Maybe Block)
-cont (Left e, _)                 = Fail e
-cont (Right Nothing, state)      = Complete
-cont (Right (Just block), state) = Continue (Just block, state)
-
-updateState state vars = state { output = Nothing
-                               , awaitingInput = Nothing
-                               , variables = vars }
 
 
-runM :: M a -> Store -> ((Either Exception a, Store) -> Partial a) -> Partial a
-runM m s = runCont (runStateT (runExceptT m) s)
+------------------------------------------------------------------------------
+-- |                            PROGRAM RUNNERS                           | --
+------------------------------------------------------------------------------
+-- | these run_____ functions run programs. If not for our testing code   | --
+-- | these would be the only functions we'd export from this module.      | --
+------------------------------------------------------------------------------
+run :: ProgIO m => Program -> Store -> m (Maybe Exception)
+run (Program _ actMap) s = continue actMap (Start s)
+
+runIO' :: Program -> Maybe Int -> IO ()
+runIO' p n = do
+  res <- run p (withSteps n)
+  case res of
+    Nothing -> return ()
+    Just e  -> putStrLn (exceptionPretty e)
 
 runIO :: Program -> IO ()
-runIO (Program _ actMap) = continueIO actMap (Start emptyState)
+runIO p = runIO' p Nothing
+
+runFixed' :: Program -> Maybe Int -> [Int] -> Either String Exception
+runFixed' p n i = let (res, FixedIO _ o) = runState
+                        (run p (withSteps n))
+                        (FixedIO i "")
+                    in case res of
+                           Just e -> Right e
+                           Nothing -> Left o
 
 runFixed :: Program -> [Int] -> Either String Exception
-runFixed (Program _ actMap) = continueFixed actMap (Start emptyState)
+runFixed p = runFixed' p Nothing
 
 runInt :: Program -> [Int] -> Either String Exception
 runInt = runFixed
@@ -366,6 +450,8 @@ runList program input = let input' = listInput input
                          in runFixed program input'
 
 -- | testing utils
+withSteps mi = emptyState { timer = mi }
+
 listInput :: [Either Int Char] -> [Int]
 listInput = map f where
   f (Left i)  = i
